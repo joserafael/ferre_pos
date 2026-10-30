@@ -1,125 +1,176 @@
-# Docker Development Environment for CodeIgniter 4
+# FerrePOS - Sistema POS, Inventario Fraccionado y Facturacion Bimonetaria (USD / VES)
 
-This repository provides a complete Docker configuration for developing CodeIgniter 4 applications. The environment includes PHP, Nginx, MySQL, Redis, MailHog, and Redis Commander.
+Sistema integral de Punto de Venta (POS), control de inventario con soporte de unidades fraccionadas y facturacion bimonetaria (Dolares USD y Bolivares VES) disenado para ferreterias en Venezuela. El proyecto implementa una arquitectura desacoplada conformada por un Backend RESTful API en CodeIgniter 4, base de datos relacional en MySQL 8.0 y un Frontend SPA en Vue 3, todo orquestado mediante Docker Compose.
 
-## Features
+## Arquitectura y Stack Tecnologico
 
-*   **PHP 8.3-FPM**
-*   **Nginx** as web server.
-*   **MySQL 8.0** as database.
-*   **Redis** for cache or sessions.
-*   **MailHog** to capture and view emails sent by the application.
-*   **Redis Commander** to view and manage data in Redis.
-*   **Setup Script (`setup.sh`)** to create a new CodeIgniter 4 project and automatically configure Docker files.
+1. **Separacion Estricta**:
+   - Backend y Frontend operan de forma independiente comunicandose exclusivamente mediante JSON sobre HTTP REST.
+2. **Backend (`ferre_pos_api` - CodeIgniter 4 / PHP 8.3-FPM)**:
+   - Controladores RESTful basados en `ResourceController` y `ResponseTrait`.
+   - Autenticacion stateless mediante tokens JWT (HS256) a traves de filtro dedicado (`JwtAuthFilter`) y soporte CORS (`CorsFilter`).
+   - Estandarizacion de respuestas JSON con la estructura `{"status": 200, "error": null, "messages": "...", "data": {...}}`.
+   - Gestion de esquema y datos iniciales mediante Migraciones y Seeders de CodeIgniter 4.
+3. **Base de Datos (MySQL 8.0 / InnoDB)**:
+   - Prohibicion estricta de tipos `FLOAT` o `DOUBLE` para evitar errores de redondeo.
+   - Montos monetarios (`costo_usd`, `precio_venta_usd`, subtotales, impuestos y totales): `DECIMAL(14,2)`.
+   - Tasas de cambio (`tasa_ves`, `tasa_aplicada`): `DECIMAL(12,4)`.
+   - Cantidades e inventario (`stock_actual`, `stock_minimo`, `factor_conversion`, `cantidad`): `DECIMAL(12,3)` para soportar ventas fraccionadas (metros, kilogramos, litros).
+   - Transacciones ACID (`$db->transStart()` / `$db->transComplete()`) con bloqueo pesimista (`FOR UPDATE`) en operaciones de inventario, compras, ajustes y ventas.
+4. **Frontend (`ferre_pos_web` - Vue 3 + Vite)**:
+   - Vue 3 con Composition API (`<script setup>`), Pinia para gestion de estado reactivo, Vue Router y Axios.
+   - Visualizacion simultanea de precios, subtotales, impuestos, pagos mixtos y vueltos en USD y VES calculados en tiempo real segun la tasa de cambio activa.
 
-## Prerequisites
+## Reglas de Negocio Principales
 
-Before starting, make sure you have the following software installed on your machine:
+### 1. Gestion Bimonetaria (USD / VES)
+- **Moneda ancla**: Dolar estadounidense (USD).
+- Las compras o entradas de inventario pueden registrarse en USD o en VES, almacenando siempre el costo convertido a USD y congelando la tasa de cambio aplicada en el documento.
+- El precio en Bolivares se calcula dinamicamente (`precio_venta_usd * tasa_activa`) en el POS, y cada factura emitida congela los montos en ambas monedas junto con el `tasa_cambio_id` y la `tasa_aplicada` del momento exacto de la transaccion.
 
-*   Docker
-*   Docker Compose
-*   Composer (required to run the `setup.sh` script)
+### 2. Categorias, Unidades de Medida y Factor de Conversion
+- Catalogo de categorias de ferreteria (Electricidad, Plomeria, Tornilleria y Fijacion, Construccion, Herramientas, Pinturas y Quimicos).
+- Catalogo de unidades de medida (`UND`, `M`, `KG`, `L`, `CAJA`, `ROLLO`) con el indicador booleano `permite_decimales`.
+- Soporte de `factor_conversion` en productos para transformar automaticamente las unidades de compra a unidades de venta al registrar facturas de proveedor (por ejemplo, compra de 1 `ROLLO` equivalente a `100.000 M` para la venta al detal por metro).
 
-## How to Use
+### 3. Kardex Inmutable
+- Ninguna existencia en `productos.stock_actual` se modifica directamente sin generar un registro auditable en la tabla `movimientos_inventario`.
+- Tipos de movimiento soportados:
+  - `ENTRADA_COMPRA`
+  - `SALIDA_VENTA`
+  - `ANULACION_VENTA`
+  - `AJUSTE_POSITIVO`
+  - `AJUSTE_NEGATIVO`
 
-### 1. Clone the Repository (Optional)
+### 4. Facturacion y Multipago Mixto (`venta_pagos`)
+- Metodos de pago preconfigurados:
+  - `EFECTIVO_VES` (VES - sin referencia obligatoria)
+  - `EFECTIVO_USD` (USD - sin referencia obligatoria)
+  - `PUNTO_DEBITO` (VES - requiere referencia/lote)
+  - `PUNTO_CREDITO` (VES - requiere referencia/lote)
+  - `BINANCE` (USD - requiere referencia/Order ID)
+  - `ZELLE` (USD - requiere referencia)
+  - `PAGO_MOVIL` (VES - requiere referencia)
+- Una misma factura admite multiples pagos combinando USD y VES, calculando el monto equivalente en USD de cada abono y registrando el vuelto entregado en USD y/o VES.
 
-If you don't have this setup locally yet:
-```bash
-git clone https://github.com/joserafael/codeigniter4-docker.git
-# or clone into a specific folder
-git clone https://github.com/joserafael/codeigniter4-docker.git new_project_name
+## Estructura del Proyecto
 
-cd codeigniter4-docker # or cd new_project_name
+```text
+ferre_pos/
+├── docker/
+│   └── nginx/
+│       └── default.conf        # Configuracion de Nginx para el Backend API
+├── ferre_pos_api/              # Backend RESTful API en CodeIgniter 4
+│   ├── app/
+│   │   ├── Controllers/Api/    # Controladores REST (Auth, TasaCambio, Producto, Inventario, Venta, etc.)
+│   │   ├── Database/
+│   │   │   ├── Migrations/     # Esquema completo MySQL 8 InnoDB (CreateFerrePosSchema)
+│   │   │   └── Seeds/          # Datos iniciales (InitialFerrePosSeeder)
+│   │   ├── Filters/            # Filtros JWT y CORS
+│   │   ├── Libraries/          # Libreria JwtLib (HS256)
+│   │   └── Models/             # Modelos de datos
+│   └── .env                    # Variables de entorno del Backend
+├── ferre_pos_web/              # Frontend SPA en Vue 3 + Vite + Pinia
+│   ├── src/
+│   │   ├── layouts/            # Layout principal con barra superior de tasa BCV activa
+│   │   ├── router/             # Rutas protegidas de la aplicacion
+│   │   ├── services/           # Cliente HTTP Axios con interceptores JWT
+│   │   ├── stores/             # Stores de Pinia (auth, tasa, catalogos)
+│   │   └── views/              # Vistas: PosView, ProductosView, InventarioView, VentasView, TasasView, etc.
+│   └── vite.config.js          # Configuracion de Vite y proxy hacia el API
+├── Dockerfile.php              # Imagen PHP 8.3-FPM con extensiones mysqli, pdo_mysql, redis, intl, bcmath, gd
+├── Dockerfile.web              # Imagen Node 20 Alpine para el servidor de desarrollo de Vue 3
+└── docker-compose.yml          # Orquestacion completa de contenedores
 ```
 
-### 2. Configure a New CodeIgniter Project
+## Esquema de Base de Datos
 
-This repository includes a `setup.sh` script to facilitate creating a new CodeIgniter 4 project and configuring Docker files.
+El esquema relacional en `ferre_pos_db` esta compuesto por las siguientes tablas:
 
-Run the script and follow the instructions:
-```bash
-chmod +x setup.sh
-./setup.sh
-```
-The script will:
-1.  Request a name for your new CodeIgniter project (e.g., `my_app_ci`).
-2.  Create a new folder with the provided name and install CodeIgniter 4 in it using `composer create-project`.
-3.  Automatically update `docker-compose.yml` and `docker/nginx/default.conf` files to use the project name you provided.
+- `usuarios`: Operadores del sistema con roles `ADMIN` y `CAJERO`.
+- `tasas_cambio`: Historial de tasas USD/VES con indicador de tasa `activa`.
+- `categorias`: Clasificacion del catalogo de productos.
+- `unidades_medida`: Unidades enteras y fraccionadas (`permite_decimales`).
+- `metodos_pago`: Formas de cobro en `USD` y `VES` y exigencia de numero de referencia.
+- `productos`: Catalogo con `unidad_compra_id`, `unidad_venta_id`, `factor_conversion`, costos/precios en USD, alicuota de IVA y stock fraccionado.
+- `entradas_inventario` y `entrada_detalles`: Cabecera y renglones de compras a proveedores en USD o VES.
+- `movimientos_inventario`: Kardex inmutable con saldo anterior, cantidad, saldo resultante y costos unitarios en ambas monedas.
+- `ventas`, `venta_detalles` y `venta_pagos`: Facturas emitidas, detalle de articulos vendidos y desglose de pagos mixtos recibidos.
 
-**Note:** The script assumes that `docker-compose.yml` and `docker/nginx/default.conf` files initially use `codeigniter_project` as a placeholder for the project directory name.
+## Ejecucion con Docker
 
-### 3. Configure the CodeIgniter `.env` File
+### Requisitos Previos
+- Docker
+- Docker Compose
 
-After the `setup.sh` script creates your project (e.g., in the `my_app_ci` folder), navigate to that folder:
-```bash
-cd your_project_name # Ex: cd my_app_ci
-```
-Copy the `env` file to `.env` and configure your application's environment variables, especially the database ones if they are different from the defaults defined in `docker-compose.yml`.
-```bash
-cp env .env
-```
-The database, Redis, and email settings in `docker-compose.yml` (`environment` section of the `app` service) are passed to CodeIgniter and generally override the values in `.env`.
-
-### 4. Start the Docker Environment
-
-Go back to the root of the Docker repository (where `docker-compose.yml` is) and run:
-```bash
-docker-compose up -d --build
-```
-This command will build the images (the first time or if `Dockerfile.php` changes) and start all services in the background.
-
-### 5. Access the Services
-
-*   **Your CodeIgniter Application**: `http://localhost:8080` (or the port configured in `NGINX_HOST_PORT` in `docker-compose.yml`).
-*   **MailHog (Web Interface for Emails)**: `http://localhost:8025`
-*   **Redis Commander**: `http://localhost:8081`
-*   **MySQL**:
-    *   Host (for external clients like DBeaver, TablePlus): `127.0.0.1`
-    *   Port: `33061` (or the port configured in `MYSQL_HOST_PORT`)
-    *   User: `user` (or the value of `MYSQL_USER`)
-    *   Password: `password` (the value of `MYSQL_PASSWORD`)
-    *   Database: `ci4_db` (the value of `MYSQL_DATABASE`)
-*   **Redis**:
-    *   Host (for external clients): `127.0.0.1`
-    *   Port: `63791` (or the port configured in `REDIS_HOST_PORT`)
-
-### 6. Run Composer and Spark Commands
-
-To run Composer commands (like `install`, `update`, `require`) or CodeIgniter `php spark` commands, you must do so inside the `app` container:
+### 1. Construir y levantar los contenedores
+Desde la raiz del proyecto, ejecute:
 
 ```bash
-# Example to install Composer dependencies
-docker-compose exec app composer install
-
-# Example to run CodeIgniter migrations
-docker-compose exec app php spark migrate
-
-# Example to install a new package
-docker-compose exec app composer require vendor/package
+docker compose up -d --build
 ```
-The default working directory inside the `app` container is already the root of your CodeIgniter project.
 
-### 7. Stop the Docker Environment
+### 2. Ejecutar migraciones y datos semilla (primera vez)
+Si la base de datos esta vacia, inicialice las tablas y los catalogos base ejecutando:
 
-To stop all containers:
 ```bash
-docker-compose down
+docker exec ferre_pos_app php spark migrate --all
+docker exec ferre_pos_app php spark db:seed InitialFerrePosSeeder
 ```
-If you want to remove volumes (and lose MySQL and Redis data):
+
+### 3. Servicios y Puertos Disponibles
+
+| Servicio | Contenedor | URL / Puerto en Host | Descripcion |
+| :--- | :--- | :--- | :--- |
+| Frontend SPA (Vue 3) | `ferre_pos_web` | `http://localhost:5173` | Interfaz grafica de usuario (POS y Administracion) |
+| Backend API (Nginx + PHP) | `ferre_pos_nginx` / `ferre_pos_app` | `http://localhost:8080/api` | API RESTful en CodeIgniter 4 |
+| MySQL 8.0 | `ferre_pos_mysql` | `127.0.0.1:33061` | Base de datos `ferre_pos_db` (usuario: `user` / clave: `password`) |
+| Redis | `ferre_pos_redis` | `127.0.0.1:63791` | Motor de cache en memoria |
+| Redis Commander | `ferre_pos_redis_commander` | `http://localhost:8081` | Interfaz web para inspeccionar Redis |
+| MailHog | `ferre_pos_mailhog` | `http://localhost:8025` | Interfaz web de pruebas de correo (SMTP en puerto `1025`) |
+
+## Credenciales de Prueba
+
+Una vez ejecutado el seeder `InitialFerrePosSeeder`, puede iniciar sesion en `http://localhost:5173` con cualquiera de las siguientes cuentas:
+
+- **Administrador**:
+  - Usuario: `admin`
+  - Contrasena: `admin123`
+- **Cajero**:
+  - Usuario: `cajero`
+  - Contrasena: `cajero123`
+
+## Endpoints Principales de la API (`/api`)
+
+- `POST /api/auth/login`: Autenticacion de usuario y emision de token JWT junto con la tasa activa.
+- `GET /api/auth/me`: Datos del usuario autenticado.
+- `GET /api/dashboard`: Resumen de indicadores (ventas del dia en USD/VES, alertas de stock bajo, tasa actual y ultimas facturas).
+- `GET /api/tasas/activa`: Consulta publica de la tasa de cambio vigente.
+- `GET /api/tasas` | `POST /api/tasas`: Historial y publicacion de nueva tasa de cambio USD/VES.
+- `GET /api/categorias` | `POST /api/categorias` | `PUT /api/categorias/{id}` | `DELETE /api/categorias/{id}`: CRUD de categorias.
+- `GET /api/unidades-medida` | `POST /api/unidades-medida`: Catalogo de unidades de medida.
+- `GET /api/metodos-pago`: Catalogo de metodos de pago activos.
+- `GET /api/productos` | `GET /api/productos/{id}` | `POST /api/productos` | `PUT /api/productos/{id}` | `DELETE /api/productos/{id}`: Gestion de productos.
+- `GET /api/inventario/entradas` | `GET /api/inventario/entradas/{id}` | `POST /api/inventario/entradas`: Registro y consulta de compras a proveedores con conversion de unidades.
+- `POST /api/inventario/ajustes`: Ajustes positivos y negativos de inventario.
+- `GET /api/inventario/kardex`: Consulta del Kardex inmutable con filtros por producto y tipo de movimiento.
+- `GET /api/ventas` | `GET /api/ventas/{id}` | `POST /api/ventas` | `POST /api/ventas/{id}/anular`: Emision de facturas POS bimonetarias con multipago y anulacion con reverso automatico de stock en el Kardex.
+
+## Comandos Utiles de Mantenimiento
+
 ```bash
-docker-compose down -v
+# Ver el estado de todos los contenedores
+docker compose ps
+
+# Consultar logs en tiempo real
+docker compose logs -f
+
+# Ejecutar comandos de CodeIgniter Spark dentro del contenedor PHP
+docker exec ferre_pos_app php spark routes
+
+# Detener los contenedores conservando los datos de MySQL y Redis
+docker compose down
+
+# Detener los contenedores y eliminar los volumenes de datos
+docker compose down -v
 ```
-
-## Project Structure
-
-*   `Dockerfile.php`: Defines the Docker image for the PHP/CodeIgniter application.
-*   `docker-compose.yml`: Orchestrates all Docker services.
-*   `docker/`: Contains specific Docker service configurations (e.g., Nginx).
-*   `setup.sh`: Script to initialize a new CodeIgniter project.
-*   `.gitignore`: File to ignore files and folders from version control.
-*   `YOUR_PROJECT_NAME/`: Folder created by `setup.sh` containing your CodeIgniter application.
-
-## Contributing
-
-Feel free to open issues or pull requests for improvements.
