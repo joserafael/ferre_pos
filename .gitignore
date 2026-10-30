@@ -1,0 +1,93 @@
+#-------------------------
+# Operating System Specific Unwanted Files
+#-------------------------
+
+# OS X
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# OS X Thumbnails
+._*
+
+# Windows Image File Caches
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer Files
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Windows Shortcuts
+*.lnk
+
+# Linux
+*~
+
+# KDE Directory Preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+#-------------------------
+# Environment Files
+#-------------------------
+# These should never be under version control,
+# as they pose a security risk.
+.env
+.vagrant
+Vagrantfile
+
+#-------------------------
+# Temporary Files
+#-------------------------
+writable/cache/*
+!writable/cache/index.html
+
+writable/logs/*
+!writable/logs/index.html
+
+writable/session/*
+!writable/session/index.html
+
+writable/uploads/*
+!writable/uploads/index.html
+
+writable/debugbar/*
+!writable/debugbar/.gitkeep
+
+php_errors.log
+
+#-------------------------
+# Test Files
+#-------------------------
+tests/coverage*
+
+# Do not save phpunit under version control.
+phpunit
+results/
+phpunit*.xml
+
+#-------------------------
+# Composer
+#-------------------------
+vendor/
+
+#-------------------------
+# IDE / Development Files
+#-------------------------
+.php-version
+
+# Jetbrains Editors (PHPStorm, etc)
+.idea/
+*.iml
+
+# Visual Studio Code
+.vscode/
