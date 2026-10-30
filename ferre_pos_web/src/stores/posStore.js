@@ -6,9 +6,35 @@ export const usePosStore = defineStore('pos', () => {
   const tasaStore = useTasaStore()
 
   const items = ref([])
-  const clienteDocumento = ref('V-00000000')
-  const clienteNombre = ref('CONSUMIDOR FINAL')
+  const clienteId = ref(null)
+  const clienteDocumento = ref('')
+  const clienteNombre = ref('')
+  const clienteTelefono = ref('')
+  const clienteEmail = ref('')
+  const clienteDireccion = ref('')
+  const clienteEstadoBusqueda = ref('') // '' | 'encontrado' | 'nuevo'
   const descuentoUsd = ref(0)
+
+  function setCliente(cliente) {
+    if (!cliente) return
+    clienteId.value = cliente.id || null
+    clienteDocumento.value = cliente.documento || ''
+    clienteNombre.value = cliente.nombre || ''
+    clienteTelefono.value = cliente.telefono || ''
+    clienteEmail.value = cliente.email || ''
+    clienteDireccion.value = cliente.direccion || ''
+    clienteEstadoBusqueda.value = 'encontrado'
+  }
+
+  function limpiarCliente() {
+    clienteId.value = null
+    clienteDocumento.value = ''
+    clienteNombre.value = ''
+    clienteTelefono.value = ''
+    clienteEmail.value = ''
+    clienteDireccion.value = ''
+    clienteEstadoBusqueda.value = ''
+  }
 
   function agregarProducto(producto, cantidadSolicitada = 1) {
     const permiteDec = Number(producto.permite_decimales) === 1
@@ -71,8 +97,7 @@ export const usePosStore = defineStore('pos', () => {
 
   function limpiarCarrito() {
     items.value = []
-    clienteDocumento.value = 'V-00000000'
-    clienteNombre.value = 'CONSUMIDOR FINAL'
+    limpiarCliente()
     descuentoUsd.value = 0
   }
 
@@ -105,8 +130,13 @@ export const usePosStore = defineStore('pos', () => {
 
   return {
     items,
+    clienteId,
     clienteDocumento,
     clienteNombre,
+    clienteTelefono,
+    clienteEmail,
+    clienteDireccion,
+    clienteEstadoBusqueda,
     descuentoUsd,
     subtotalUsd,
     impuestoUsd,
@@ -115,6 +145,8 @@ export const usePosStore = defineStore('pos', () => {
     impuestoVes,
     descuentoVes,
     totalVes,
+    setCliente,
+    limpiarCliente,
     agregarProducto,
     actualizarCantidad,
     eliminarItem,

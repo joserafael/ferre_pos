@@ -29,6 +29,84 @@ const procesandoVenta = ref(false)
 // Modal Factura emitida
 const facturaEmitida = ref(null)
 
+// Búsqueda y registro de Cliente por Cédula / RIF
+const buscandoCliente = ref(false)
+const guardandoCliente = ref(false)
+const mostrarCamposCliente = ref(false)
+const ultimoDocumentoBuscado = ref('')
+
+async function buscarClientePorDocumento(forzar = false) {
+  const doc = posStore.clienteDocumento.trim().toUpperCase()
+  if (!doc) {
+    posStore.clienteEstadoBusqueda = ''
+    return
+  }
+  if (!forzar && doc === ultimoDocumentoBuscado.value && posStore.clienteEstadoBusqueda) {
+    return
+  }
+
+  posStore.clienteDocumento = doc
+  ultimoDocumentoBuscado.value = doc
+  buscandoCliente.value = true
+  alertaError.value = ''
+
+  try {
+    const res = await api.get(`/clientes/buscar?documento=${encodeURIComponent(doc)}`)
+    if (res.data) {
+      posStore.setCliente(res.data)
+      ultimoDocumentoBuscado.value = res.data.documento
+      mostrarCamposCliente.value = Boolean(
+        res.data.nombre || res.data.telefono || res.data.email || res.data.direccion
+      )
+    } else {
+      posStore.clienteId = null
+      posStore.clienteNombre = ''
+      posStore.clienteTelefono = ''
+      posStore.clienteEmail = ''
+      posStore.clienteDireccion = ''
+      posStore.clienteEstadoBusqueda = 'nuevo'
+      mostrarCamposCliente.value = true
+    }
+  } catch (e) {
+    alertaError.value = e.message
+  } finally {
+    buscandoCliente.value = false
+  }
+}
+
+function alCambiarDocumento() {
+  if (posStore.clienteDocumento.trim().toUpperCase() !== ultimoDocumentoBuscado.value) {
+    posStore.clienteId = null
+    posStore.clienteEstadoBusqueda = ''
+  }
+}
+
+async function guardarClienteRapido() {
+  const doc = posStore.clienteDocumento.trim().toUpperCase()
+  if (!doc) {
+    alertaError.value = 'La Cédula o RIF es obligatoria para registrar el cliente.'
+    return
+  }
+  guardandoCliente.value = true
+  alertaError.value = ''
+  try {
+    const res = await api.post('/clientes', {
+      documento: doc,
+      nombre: posStore.clienteNombre.trim() || null,
+      telefono: posStore.clienteTelefono.trim() || null,
+      email: posStore.clienteEmail.trim() || null,
+      direccion: posStore.clienteDireccion.trim() || null
+    })
+    posStore.setCliente(res.data)
+    ultimoDocumentoBuscado.value = res.data.documento
+    alertaExito.value = `Cliente ${res.data.documento} guardado correctamente.`
+  } catch (e) {
+    alertaError.value = e.message
+  } finally {
+    guardandoCliente.value = false
+  }
+}
+
 async function cargarDatosPos() {
   cargando.value = true
   try {
@@ -95,11 +173,18 @@ const excedenteCambioUsd = computed(() => {
 
 const excedenteCambioVes = computed(() => tasaStore.aBolivares(excedenteCambioUsd.value))
 
-function abrirCheckoutMultipago() {
+async function abrirCheckoutMultipago() {
   alertaError.value = ''
   if (!posStore.items.length) {
     alertaError.value = 'Agregue al menos un producto al carrito antes de facturar.'
     return
+  }
+  if (!posStore.clienteDocumento.trim()) {
+    alertaError.value = 'Debe ingresar la Cédula o RIF del cliente (único campo obligatorio).'
+    return
+  }
+  if (!posStore.clienteEstadoBusqueda) {
+    await buscarClientePorDocumento(true)
   }
   pagosActuales.value = []
   referenciaPagoInput.value = ''
@@ -180,8 +265,11 @@ async function confirmarFacturaBimonetaria() {
   procesandoVenta.value = true
   try {
     const payload = {
-      cliente_documento: posStore.clienteDocumento,
-      cliente_nombre: posStore.clienteNombre,
+      cliente_documento: posStore.clienteDocumento.trim().toUpperCase(),
+      cliente_nombre: posStore.clienteNombre.trim() || null,
+      cliente_telefono: posStore.clienteTelefono.trim() || null,
+      cliente_email: posStore.clienteEmail.trim() || null,
+      cliente_direccion: posStore.clienteDireccion.trim() || null,
       descuento_usd: Number(posStore.descuentoUsd || 0),
       vuelto_usd: Number(vueltoUsdInput.value || 0),
       vuelto_ves: Number(vueltoVesInput.value || 0),
@@ -200,6 +288,8 @@ async function confirmarFacturaBimonetaria() {
     facturaEmitida.value = res.data
     modalPago.value = false
     posStore.limpiarCarrito()
+    ultimoDocumentoBuscado.value = ''
+    mostrarCamposCliente.value = false
     alertaExito.value = `Factura ${res.data.numero_factura} emitida correctamente.`
     await cargarDatosPos()
   } catch (e) {
@@ -304,15 +394,133 @@ async function confirmarFacturaBimonetaria() {
         </button>
       </div>
 
-      <!-- Datos rápidos del Cliente -->
-      <div class="grid-2" style="margin-bottom: 0.75rem">
-        <div>
-          <label class="form-label">RIF / Cédula</label>
-          <input v-model="posStore.clienteDocumento" type="text" class="form-control mono" placeholder="V-12345678" />
+      <!-- Búsqueda y Registro de Cliente por Cédula / RIF -->
+      <div class="client-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem">
+          <label class="form-label" style="margin-bottom: 0">
+            Cédula / RIF del Cliente <span style="color: var(--danger)">* (Obligatorio)</span>
+          </label>
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            style="padding: 0.15rem 0.5rem; font-size: 0.72rem"
+            @click="mostrarCamposCliente = !mostrarCamposCliente"
+          >
+            {{ mostrarCamposCliente ? 'Ocultar datos opcionales' : '+ Datos del cliente (Opcional)' }}
+          </button>
         </div>
-        <div>
-          <label class="form-label">Cliente / Razón Social</label>
-          <input v-model="posStore.clienteNombre" type="text" class="form-control" placeholder="CONSUMIDOR FINAL" />
+
+        <div style="display: flex; gap: 0.45rem">
+          <input
+            v-model="posStore.clienteDocumento"
+            type="text"
+            class="form-control mono"
+            placeholder="Ej: V-12345678 o J-40123456-7"
+            @input="alCambiarDocumento"
+            @keyup.enter="buscarClientePorDocumento(true)"
+            @blur="buscarClientePorDocumento(false)"
+          />
+          <button
+            type="button"
+            class="btn btn-dark btn-sm"
+            :disabled="buscandoCliente || !posStore.clienteDocumento.trim()"
+            @click="buscarClientePorDocumento(true)"
+          >
+            {{ buscandoCliente ? '...' : 'Buscar' }}
+          </button>
+          <button
+            v-if="posStore.clienteDocumento"
+            type="button"
+            class="btn btn-outline btn-sm"
+            title="Limpiar cliente"
+            @click="posStore.limpiarCliente(); ultimoDocumentoBuscado = ''; mostrarCamposCliente = false"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Estado de búsqueda del cliente -->
+        <div
+          v-if="posStore.clienteEstadoBusqueda === 'encontrado'"
+          class="badge badge-usd"
+          style="width: 100%; margin-top: 0.45rem; padding: 0.35rem 0.55rem; justify-content: space-between"
+        >
+          <span>
+            ✓ Cliente registrado:
+            <strong>{{ posStore.clienteNombre || 'Sin nombre registrado' }}</strong>
+            <span v-if="posStore.clienteTelefono" class="mono"> · {{ posStore.clienteTelefono }}</span>
+          </span>
+          <a
+            href="#"
+            style="color: inherit; text-decoration: underline; font-size: 0.72rem"
+            @click.prevent="mostrarCamposCliente = !mostrarCamposCliente"
+          >
+            {{ mostrarCamposCliente ? 'Cerrar' : 'Ver/Editar' }}
+          </a>
+        </div>
+
+        <div
+          v-else-if="posStore.clienteEstadoBusqueda === 'nuevo'"
+          class="badge badge-amber"
+          style="width: 100%; margin-top: 0.45rem; padding: 0.35rem 0.55rem"
+        >
+          Cliente nuevo ({{ posStore.clienteDocumento }}): los siguientes datos son opcionales y se guardarán con la venta.
+        </div>
+
+        <!-- Campos opcionales del cliente: Nombre, Teléfono, Email, Dirección -->
+        <div v-if="mostrarCamposCliente" class="client-optional-fields">
+          <div class="grid-2" style="gap: 0.5rem; margin-bottom: 0.5rem">
+            <div>
+              <label class="form-label" style="font-size: 0.72rem">Nombre / Razón Social (Opcional)</label>
+              <input
+                v-model="posStore.clienteNombre"
+                type="text"
+                class="form-control"
+                placeholder="Ej. Juan Pérez / Constructora"
+              />
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 0.72rem">Teléfono (Opcional)</label>
+              <input
+                v-model="posStore.clienteTelefono"
+                type="text"
+                class="form-control mono"
+                placeholder="Ej. 0414-1234567"
+              />
+            </div>
+          </div>
+
+          <div class="grid-2" style="gap: 0.5rem">
+            <div>
+              <label class="form-label" style="font-size: 0.72rem">Email (Opcional)</label>
+              <input
+                v-model="posStore.clienteEmail"
+                type="email"
+                class="form-control"
+                placeholder="cliente@correo.com"
+              />
+            </div>
+            <div>
+              <label class="form-label" style="font-size: 0.72rem">Dirección (Opcional)</label>
+              <input
+                v-model="posStore.clienteDireccion"
+                type="text"
+                class="form-control"
+                placeholder="Av. / Calle / Sector"
+              />
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem">
+            <button
+              type="button"
+              class="btn btn-outline btn-sm"
+              :disabled="guardandoCliente || !posStore.clienteDocumento.trim()"
+              @click="guardarClienteRapido"
+            >
+              {{ guardandoCliente ? 'Guardando...' : 'Guardar / Actualizar ficha del cliente' }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -572,7 +780,10 @@ async function confirmarFacturaBimonetaria() {
             <strong>FERRETERÍA POS VENEZUELA</strong><br />
             Factura: <strong>{{ facturaEmitida.numero_factura }}</strong><br />
             Fecha: {{ facturaEmitida.created_at }}<br />
-            Cliente: {{ facturaEmitida.cliente_nombre }} ({{ facturaEmitida.cliente_documento }})<br />
+            Cédula / RIF: <strong>{{ facturaEmitida.cliente_documento }}</strong><br />
+            <span v-if="facturaEmitida.cliente_nombre">Cliente: {{ facturaEmitida.cliente_nombre }}<br /></span>
+            <span v-if="facturaEmitida.cliente_telefono">Tel: {{ facturaEmitida.cliente_telefono }}<br /></span>
+            <span v-if="facturaEmitida.cliente_direccion">Dir: {{ facturaEmitida.cliente_direccion }}<br /></span>
             Tasa BCV Aplicada: Bs. {{ Number(facturaEmitida.tasa_aplicada).toFixed(4) }} / $1
           </div>
           <hr style="border: none; border-top: 1px dashed #cbd5e1; margin: 0.5rem 0" />
@@ -687,6 +898,20 @@ async function confirmarFacturaBimonetaria() {
   margin-bottom: 0.75rem;
   padding-bottom: 0.65rem;
   border-bottom: 1px solid var(--border-color);
+}
+
+.client-box {
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.client-optional-fields {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border-color);
 }
 
 .cart-items {

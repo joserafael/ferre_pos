@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Models\ClienteModel;
 use App\Models\MetodoPagoModel;
 use App\Models\MovimientoInventarioModel;
 use App\Models\ProductoModel;
@@ -16,8 +17,10 @@ class VentaController extends ApiController
 {
     public function index(): ResponseInterface
     {
-        $estado = $this->request->getGet('estado');
-        $q      = $this->request->getGet('q');
+        $estado    = $this->request->getGet('estado');
+        $q         = $this->request->getGet('q');
+        $usuarioId = $this->request->getGet('usuario_id');
+        $auth      = $this->getAuthUser();
 
         $db      = \Config\Database::connect();
         $builder = $db->table('ventas v')
@@ -25,6 +28,13 @@ class VentaController extends ApiController
             ->join('usuarios u', 'u.id = v.usuario_id', 'left')
             ->orderBy('v.id', 'DESC')
             ->limit(100);
+
+        // Si el usuario es CAJERO, solo puede ver las ventas realizadas por él mismo
+        if (strtoupper((string) ($auth['rol'] ?? '')) === 'CAJERO') {
+            $builder->where('v.usuario_id', (int) ($auth['uid'] ?? 0));
+        } elseif (!empty($usuarioId)) {
+            $builder->where('v.usuario_id', (int) $usuarioId);
+        }
 
         if (!empty($estado)) {
             $builder->where('v.estado', strtoupper($estado));
@@ -72,6 +82,11 @@ class VentaController extends ApiController
             return $this->apiError('Factura no encontrada.', 404, 'NOT_FOUND');
         }
 
+        $auth = $this->getAuthUser();
+        if (strtoupper((string) ($auth['rol'] ?? '')) === 'CAJERO' && (int) $venta['usuario_id'] !== (int) ($auth['uid'] ?? 0)) {
+            return $this->apiError('No tiene permiso para visualizar ventas de otro usuario.', 403, 'FORBIDDEN');
+        }
+
         $detalles = $db->table('venta_detalles d')
             ->select('d.*, p.sku, p.codigo_barra, p.nombre as producto_nombre, uv.codigo as unidad_codigo, uv.nombre as unidad_nombre')
             ->join('productos p', 'p.id = d.producto_id', 'left')
@@ -108,13 +123,28 @@ class VentaController extends ApiController
     public function create(): ResponseInterface
     {
         $payload          = $this->getRequestPayload();
-        $clienteDocumento = strtoupper(trim((string) ($payload['cliente_documento'] ?? 'V-00000000')));
-        $clienteNombre    = trim((string) ($payload['cliente_nombre'] ?? 'CONSUMIDOR FINAL'));
+        $clienteDocumento = ClienteModel::normalizarDocumento((string) ($payload['cliente_documento'] ?? ''));
+        $clienteNombre    = isset($payload['cliente_nombre']) && trim((string) $payload['cliente_nombre']) !== ''
+            ? trim((string) $payload['cliente_nombre'])
+            : null;
+        $clienteTelefono  = isset($payload['cliente_telefono']) && trim((string) $payload['cliente_telefono']) !== ''
+            ? trim((string) $payload['cliente_telefono'])
+            : null;
+        $clienteEmail     = isset($payload['cliente_email']) && trim((string) $payload['cliente_email']) !== ''
+            ? trim((string) $payload['cliente_email'])
+            : null;
+        $clienteDireccion = isset($payload['cliente_direccion']) && trim((string) $payload['cliente_direccion']) !== ''
+            ? trim((string) $payload['cliente_direccion'])
+            : null;
         $descuentoUsd     = max(0.00, round((float) ($payload['descuento_usd'] ?? 0.00), 2));
         $vueltoUsd        = max(0.00, round((float) ($payload['vuelto_usd'] ?? 0.00), 2));
         $vueltoVes        = max(0.00, round((float) ($payload['vuelto_ves'] ?? 0.00), 2));
         $items            = $payload['items'] ?? [];
         $pagos            = $payload['pagos'] ?? [];
+
+        if ($clienteDocumento === '') {
+            return $this->apiError('La Cédula o RIF del cliente es obligatoria para registrar la venta.', 422, 'DOCUMENT_REQUIRED');
+        }
 
         if (!is_array($items) || empty($items)) {
             return $this->apiError('El carrito de venta no puede estar vacío.', 422, 'EMPTY_CART');
@@ -266,6 +296,16 @@ class VentaController extends ApiController
 
         $db->transStart();
 
+        // Registrar o actualizar cliente automáticamente por Cédula/RIF (solo documento es obligatorio)
+        $clienteModel    = new ClienteModel();
+        $clienteGuardado = $clienteModel->guardarPorDocumento([
+            'documento' => $clienteDocumento,
+            'nombre'    => $clienteNombre,
+            'telefono'  => $clienteTelefono,
+            'email'     => $clienteEmail,
+            'direccion' => $clienteDireccion,
+        ]);
+
         // Generar correlativo de factura
         $ultimoId      = (int) ($db->table('ventas')->selectMax('id')->get()->getRowArray()['id'] ?? 0);
         $numeroFactura = sprintf('FAC-%06d', $ultimoId + 1);
@@ -275,10 +315,16 @@ class VentaController extends ApiController
         $pagoModel    = new VentaPagoModel();
         $kardexModel  = new MovimientoInventarioModel();
 
+        $nombreParaVenta = $clienteGuardado['nombre'] ?? $clienteNombre;
+
         $ventaId = $ventaModel->insert([
             'numero_factura'    => $numeroFactura,
-            'cliente_documento' => $clienteDocumento ?: 'V-00000000',
-            'cliente_nombre'    => $clienteNombre ?: 'CONSUMIDOR FINAL',
+            'cliente_id'        => (int) $clienteGuardado['id'],
+            'cliente_documento' => $clienteGuardado['documento'],
+            'cliente_nombre'    => $nombreParaVenta,
+            'cliente_telefono'  => $clienteGuardado['telefono'] ?? $clienteTelefono,
+            'cliente_email'     => $clienteGuardado['email'] ?? $clienteEmail,
+            'cliente_direccion' => $clienteGuardado['direccion'] ?? $clienteDireccion,
             'tasa_cambio_id'    => $tasaId,
             'tasa_aplicada'     => $tasaAplicada,
             'subtotal_usd'      => $subtotalUsd,
@@ -326,7 +372,7 @@ class VentaController extends ApiController
                 'costo_unitario_usd' => (float) $prod['costo_usd'],
                 'costo_unitario_ves' => round((float) $prod['costo_usd'] * $tasaAplicada, 2),
                 'tasa_aplicada'      => $tasaAplicada,
-                'observacion'        => "Venta POS Factura {$numeroFactura} ({$clienteNombre})",
+                'observacion'        => "Venta POS Factura {$numeroFactura} (" . ($nombreParaVenta ?: $clienteGuardado['documento']) . ")",
                 'usuario_id'         => $auth['uid'] ?? 1,
                 'created_at'         => $now,
             ]);
@@ -349,11 +395,21 @@ class VentaController extends ApiController
 
     public function anular($id = null): ResponseInterface
     {
+        $auth = $this->getAuthUser();
+        if (strtoupper((string) ($auth['rol'] ?? '')) !== 'ADMIN') {
+            return $this->apiError('Solo un administrador puede anular facturas.', 403, 'FORBIDDEN');
+        }
+
         $ventaModel = new VentaModel();
         $venta      = $ventaModel->find($id);
 
         if (!$venta) {
             return $this->apiError('Factura no encontrada.', 404, 'NOT_FOUND');
+        }
+
+        $auth = $this->getAuthUser();
+        if (strtoupper((string) ($auth['rol'] ?? '')) === 'CAJERO' && (int) $venta['usuario_id'] !== (int) ($auth['uid'] ?? 0)) {
+            return $this->apiError('No tiene permiso para visualizar ventas de otro usuario.', 403, 'FORBIDDEN');
         }
 
         if ($venta['estado'] === 'ANULADA') {

@@ -8,6 +8,7 @@ import ProductosView from '@/views/ProductosView.vue'
 import CategoriasView from '@/views/CategoriasView.vue'
 import InventarioView from '@/views/InventarioView.vue'
 import VentasView from '@/views/VentasView.vue'
+import CajerosView from '@/views/CajerosView.vue'
 
 const routes = [
   {
@@ -22,12 +23,13 @@ const routes = [
     meta: { requiresAuth: true },
     children: [
       { path: '', redirect: '/pos' },
-      { path: 'dashboard', name: 'dashboard', component: DashboardView },
       { path: 'pos', name: 'pos', component: PosView },
-      { path: 'productos', name: 'productos', component: ProductosView },
-      { path: 'categorias', name: 'categorias', component: CategoriasView },
-      { path: 'inventario', name: 'inventario', component: InventarioView },
-      { path: 'ventas', name: 'ventas', component: VentasView }
+      { path: 'ventas', name: 'ventas', component: VentasView },
+      { path: 'dashboard', name: 'dashboard', component: DashboardView, meta: { adminOnly: true } },
+      { path: 'productos', name: 'productos', component: ProductosView, meta: { adminOnly: true } },
+      { path: 'categorias', name: 'categorias', component: CategoriasView, meta: { adminOnly: true } },
+      { path: 'inventario', name: 'inventario', component: InventarioView, meta: { adminOnly: true } },
+      { path: 'cajeros', name: 'cajeros', component: CajerosView, meta: { adminOnly: true } }
     ]
   }
 ]
@@ -43,6 +45,9 @@ router.beforeEach((to) => {
     return { name: 'login' }
   }
   if (to.meta.guest && authStore.isAuthenticated) {
+    return { name: 'pos' }
+  }
+  if (to.meta.adminOnly && !authStore.isAdmin) {
     return { name: 'pos' }
   }
 })

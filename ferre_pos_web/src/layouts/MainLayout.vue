@@ -19,6 +19,7 @@ onMounted(() => {
 })
 
 function abrirModalTasa() {
+  if (!authStore.isAdmin) return
   nuevaTasaInput.value = tasaStore.tasaVes.toFixed(4)
   fuenteTasaInput.value = tasaStore.tasaActiva?.fuente || 'BCV Oficial'
   errorTasa.value = ''
@@ -66,21 +67,27 @@ function cerrarSesion() {
         <router-link to="/pos" class="nav-link" active-class="active">
           <span>🛒</span> Punto de Venta (POS)
         </router-link>
-        <router-link to="/dashboard" class="nav-link" active-class="active">
-          <span>📊</span> Dashboard Bimonetario
-        </router-link>
-        <router-link to="/productos" class="nav-link" active-class="active">
-          <span>🔩</span> Catálogo & Conversión
-        </router-link>
-        <router-link to="/categorias" class="nav-link" active-class="active">
-          <span>🏷️</span> Categorías & Unidades
-        </router-link>
-        <router-link to="/inventario" class="nav-link" active-class="active">
-          <span>📦</span> Compras & Kardex
-        </router-link>
         <router-link to="/ventas" class="nav-link" active-class="active">
-          <span>🧾</span> Facturas & Multipago
+          <span>🧾</span> {{ authStore.isAdmin ? 'Facturas & Multipago' : 'Mis Ventas Realizadas' }}
         </router-link>
+
+        <template v-if="authStore.isAdmin">
+          <router-link to="/dashboard" class="nav-link" active-class="active">
+            <span>📊</span> Dashboard Bimonetario
+          </router-link>
+          <router-link to="/productos" class="nav-link" active-class="active">
+            <span>🔩</span> Catálogo & Conversión
+          </router-link>
+          <router-link to="/categorias" class="nav-link" active-class="active">
+            <span>🏷️</span> Categorías & Unidades
+          </router-link>
+          <router-link to="/inventario" class="nav-link" active-class="active">
+            <span>📦</span> Compras & Kardex
+          </router-link>
+          <router-link to="/cajeros" class="nav-link" active-class="active">
+            <span>👤</span> Cajeros & Histórico
+          </router-link>
+        </template>
       </nav>
 
       <div class="sidebar-footer">
@@ -106,10 +113,15 @@ function cerrarSesion() {
         </div>
 
         <div class="topbar-right">
-          <div class="rate-pill" @click="abrirModalTasa" title="Clic para actualizar tasa de cambio">
+          <div
+            class="rate-pill"
+            :style="{ cursor: authStore.isAdmin ? 'pointer' : 'default' }"
+            :title="authStore.isAdmin ? 'Clic para actualizar tasa de cambio' : 'Tasa de cambio activa (solo lectura para cajero)'"
+            @click="abrirModalTasa"
+          >
             <span class="rate-label">TASA ACTIVA ({{ tasaStore.tasaActiva?.fuente || 'BCV' }}):</span>
             <strong class="mono rate-val">Bs. {{ tasaStore.tasaVes.toFixed(4) }} / $1</strong>
-            <span class="rate-edit">Cambiar ✎</span>
+            <span v-if="authStore.isAdmin" class="rate-edit">Cambiar ✎</span>
           </div>
         </div>
       </header>

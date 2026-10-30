@@ -37,6 +37,22 @@ class JwtAuthFilter implements FilterInterface
             $payload = $jwt->decode($matches[1]);
             // Adjuntamos el usuario autenticado globalmente para los controladores
             $request->user = $payload;
+
+            // Validación de rol si el filtro recibe argumentos (ej. jwt:ADMIN)
+            if (!empty($arguments)) {
+                $rolUsuario      = strtoupper((string) ($payload['rol'] ?? ''));
+                $rolesPermitidos = array_map('strtoupper', $arguments);
+                if (!in_array($rolUsuario, $rolesPermitidos, true)) {
+                    return service('response')
+                        ->setStatusCode(403)
+                        ->setJSON([
+                            'status'   => 403,
+                            'error'    => 'FORBIDDEN',
+                            'messages' => 'Acceso denegado: el rol ' . $rolUsuario . ' solo tiene permiso para ver y realizar ventas.',
+                            'data'     => null,
+                        ]);
+                }
+            }
         } catch (Throwable $e) {
             return service('response')
                 ->setStatusCode(401)

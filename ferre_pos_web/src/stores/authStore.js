@@ -8,6 +8,8 @@ export const useAuthStore = defineStore('auth', () => {
   const usuario = ref(JSON.parse(localStorage.getItem('ferrepos_user') || 'null'))
 
   const isAuthenticated = computed(() => Boolean(token.value))
+  const isAdmin = computed(() => String(usuario.value?.rol || '').toUpperCase() === 'ADMIN')
+  const isCajero = computed(() => String(usuario.value?.rol || '').toUpperCase() === 'CAJERO')
 
   async function login(username, password) {
     const res = await api.post('/auth/login', { username, password })
@@ -34,6 +36,8 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     usuario,
     isAuthenticated,
+    isAdmin,
+    isCajero,
     login,
     logout
   }

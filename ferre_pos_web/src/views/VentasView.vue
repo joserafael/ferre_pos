@@ -2,8 +2,10 @@
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
+import { useAuthStore } from '@/stores/authStore'
 
 const tasaStore = useTasaStore()
+const authStore = useAuthStore()
 const ventas = ref([])
 const busqueda = ref('')
 const facturaDetalle = ref(null)
@@ -46,9 +48,15 @@ async function anularFactura(venta) {
   <div>
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem">
       <div>
-        <h2 style="font-size: 1.35rem; font-weight: 800">Historial de Facturas & Multipago</h2>
+        <h2 style="font-size: 1.35rem; font-weight: 800">
+          {{ authStore.isAdmin ? 'Historial de Facturas & Multipago' : 'Mis Ventas Realizadas' }}
+        </h2>
         <p style="color: var(--text-muted); font-size: 0.85rem">
-          Consulta de ventas con tasa histórica congelada, desglose de pagos mixtos y anulación con reversión de Kardex.
+          {{
+            authStore.isAdmin
+              ? 'Consulta de ventas con tasa histórica congelada, desglose de pagos mixtos y anulación con reversión de Kardex.'
+              : 'Consulta en modo lectura de las ventas emitidas por su usuario en el Punto de Venta.'
+          }}
         </p>
       </div>
       <div style="display: flex; gap: 0.5rem">
@@ -77,6 +85,7 @@ async function anularFactura(venta) {
             <tr>
               <th>Factura</th>
               <th>Cliente</th>
+              <th>Cajero</th>
               <th>Tasa Congelada</th>
               <th>Total USD ($)</th>
               <th>Total Bs.</th>
@@ -87,16 +96,17 @@ async function anularFactura(venta) {
           </thead>
           <tbody>
             <tr v-if="!ventas.length">
-              <td colspan="8" style="text-align: center; color: var(--text-muted)">
+              <td colspan="9" style="text-align: center; color: var(--text-muted)">
                 No hay facturas registradas aún. Realice una venta desde el POS.
               </td>
             </tr>
             <tr v-for="v in ventas" :key="v.id">
               <td class="mono"><strong>{{ v.numero_factura }}</strong></td>
               <td>
-                <strong>{{ v.cliente_nombre }}</strong>
+                <strong>{{ v.cliente_nombre || 'Sin nombre registrado' }}</strong>
                 <div class="mono" style="font-size: 0.72rem; color: var(--text-muted)">{{ v.cliente_documento }}</div>
               </td>
+              <td>{{ v.usuario_nombre || '—' }}</td>
               <td class="mono">Bs. {{ Number(v.tasa_aplicada).toFixed(4) }}</td>
               <td class="mono">
                 <strong style="color: var(--usd-green)">{{ tasaStore.formatUsd(v.total_usd) }}</strong>
@@ -113,7 +123,7 @@ async function anularFactura(venta) {
               <td style="display: flex; gap: 0.4rem">
                 <button class="btn btn-outline btn-sm" @click="verDetalle(v.id)">Ver Detalle</button>
                 <button
-                  v-if="v.estado === 'COMPLETADA'"
+                  v-if="authStore.isAdmin && v.estado === 'COMPLETADA'"
                   class="btn btn-danger btn-sm"
                   @click="anularFactura(v)"
                 >
@@ -141,8 +151,11 @@ async function anularFactura(venta) {
 
         <div class="grid-3" style="margin-bottom: 1rem; font-size: 0.83rem">
           <div>
-            <strong>Cliente:</strong> {{ facturaDetalle.cliente_nombre }}<br />
-            <strong>Documento:</strong> <span class="mono">{{ facturaDetalle.cliente_documento }}</span>
+            <strong>Cédula / RIF:</strong> <span class="mono">{{ facturaDetalle.cliente_documento }}</span><br />
+            <strong>Cliente:</strong> {{ facturaDetalle.cliente_nombre || '—' }}<br />
+            <span v-if="facturaDetalle.cliente_telefono"><strong>Teléfono:</strong> <span class="mono">{{ facturaDetalle.cliente_telefono }}</span><br /></span>
+            <span v-if="facturaDetalle.cliente_email"><strong>Email:</strong> {{ facturaDetalle.cliente_email }}<br /></span>
+            <span v-if="facturaDetalle.cliente_direccion"><strong>Dirección:</strong> {{ facturaDetalle.cliente_direccion }}</span>
           </div>
           <div>
             <strong>Tasa Congelada:</strong> <span class="mono">Bs. {{ Number(facturaDetalle.tasa_aplicada).toFixed(4) }}</span><br />

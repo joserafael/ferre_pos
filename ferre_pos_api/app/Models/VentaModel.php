@@ -12,8 +12,12 @@ class VentaModel extends Model
     protected $useTimestamps    = false;
     protected $allowedFields    = [
         'numero_factura',
+        'cliente_id',
         'cliente_documento',
         'cliente_nombre',
+        'cliente_telefono',
+        'cliente_email',
+        'cliente_direccion',
         'tasa_cambio_id',
         'tasa_aplicada',
         'subtotal_usd',
