@@ -53,6 +53,41 @@ Sistema integral de Punto de Venta (POS), control de inventario con soporte de u
   - `PAGO_MOVIL` (VES - requiere referencia)
 - Una misma factura admite multiples pagos combinando USD y VES, calculando el monto equivalente en USD de cada abono y registrando el vuelto entregado en USD y/o VES.
 
+## Capturas de Pantalla e Interfaz del Sistema
+
+### 1. Punto de Venta (POS) Bimonetario
+Interfaz ágil de caja y mostrador diseñada para ventas rápidas con doble visualización de precios (USD y VES) calculados en tiempo real según la tasa activa. Incluye botones de fraccionamiento rápido para artículos vendidos por metro o kilogramo (`+0.25`, `+0.50`, `+2.50`), filtrado por categorías y ticket de venta interactivo.
+
+![Punto de Venta (POS) Bimonetario](./imagenes/2.png)
+
+---
+
+### 2. Cobro Multipago Mixto (USD / VES) y Vueltos
+Modal de liquidación que congela la tasa de cambio de la factura. Permite combinar múltiples métodos de pago (Efectivo USD/VES, Punto Débito, Punto Crédito, Pago Móvil, Zelle, Binance) en una sola transacción, calculando equivalencias en dólares y saldos de vuelto o excedente en tiempo real.
+
+![Cobro Multipago Mixto](./imagenes/3.png)
+
+---
+
+### 3. Dashboard Operativo Bimonetario
+Panel de control con métricas en tiempo real: ventas del día en USD y VES, facturación acumulada, valorización total del inventario al costo, tasa de cambio BCV aplicada, recaudación desglosada por método de pago y panel de alertas de productos en stock mínimo.
+
+![Dashboard Operativo Bimonetario](./imagenes/5.png)
+
+---
+
+### 4. Actualización y Registro Histórico de Tasa de Cambio
+Ventana de control de la Tasa Oficial BCV activa que rige todo el sistema. Mantiene un registro histórico auditable de cada tasa fijada con fecha, hora exacta y el usuario que realizó la actualización.
+
+![Actualización de Tasa de Cambio](./imagenes/1.png)
+
+---
+
+### 5. Kardex Inmutable y Trazabilidad de Inventario
+Consulta detallada de todos los movimientos de stock (`ENTRADA_COMPRA`, `SALIDA_VENTA`, ajustes) con precisión de 3 decimales para unidades fraccionadas (metros, litros, kilos), balance anterior vs. resultante, costos unitarios bimonetarios y vinculación con documentos o facturas.
+
+![Kardex de Inventario](./imagenes/4.png)
+
 ## Estructura del Proyecto
 
 ```text
