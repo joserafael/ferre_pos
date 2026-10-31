@@ -9,7 +9,10 @@ class CajeroController extends ApiController
 {
     public function index(): ResponseInterface
     {
-        $db   = \Config\Database::connect();
+        $db            = \Config\Database::connect();
+        $usuariosTable = $db->prefixTable('usuarios');
+        $ventasTable   = $db->prefixTable('ventas');
+
         $rows = $db->query("
             SELECT
                 u.id,
@@ -24,8 +27,8 @@ class CajeroController extends ApiController
                 COALESCE(SUM(CASE WHEN v.estado = 'COMPLETADA' THEN v.total_usd ELSE 0 END), 0.00) AS total_vendido_usd,
                 COALESCE(SUM(CASE WHEN v.estado = 'COMPLETADA' THEN v.total_ves ELSE 0 END), 0.00) AS total_vendido_ves,
                 MAX(v.created_at) AS ultima_venta
-            FROM usuarios u
-            LEFT JOIN ventas v ON v.usuario_id = u.id
+            FROM {$usuariosTable} u
+            LEFT JOIN {$ventasTable} v ON v.usuario_id = u.id
             GROUP BY u.id, u.nombre, u.username, u.email, u.rol, u.activo, u.created_at
             ORDER BY u.rol DESC, u.id ASC
         ")->getResultArray();

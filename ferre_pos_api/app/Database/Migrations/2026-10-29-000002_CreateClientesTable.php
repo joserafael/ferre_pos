@@ -8,7 +8,7 @@ class CreateClientesTable extends Migration
 {
     public function up(): void
     {
-        $tableAttrs = ['ENGINE' => 'InnoDB', 'DEFAULT CHARSET' => 'utf8mb4', 'COLLATE' => 'utf8mb4_unicode_ci'];
+        $tableAttrs = $this->db->DBDriver === 'MySQLi' ? ['ENGINE' => 'InnoDB', 'DEFAULT CHARSET' => 'utf8mb4', 'COLLATE' => 'utf8mb4_unicode_ci'] : [];
 
         // 1. Tabla clientes (solo documento es obligatorio)
         $this->forge->addField([
@@ -56,15 +56,19 @@ class CreateClientesTable extends Migration
         $this->forge->addColumn('ventas', $fields);
 
         // Permitir que cliente_nombre sea NULL en ventas
-        $this->forge->modifyColumn('ventas', [
-            'cliente_nombre' => [
-                'type'       => 'VARCHAR',
-                'constraint' => 150,
-                'null'       => true,
-            ],
-        ]);
+        if ($this->db->DBDriver === 'MySQLi') {
+            $this->forge->modifyColumn('ventas', [
+                'cliente_nombre' => [
+                    'type'       => 'VARCHAR',
+                    'constraint' => 150,
+                    'null'       => true,
+                ],
+            ]);
+        }
 
-        $this->db->query('ALTER TABLE `ventas` ADD CONSTRAINT `ventas_cliente_id_foreign` FOREIGN KEY (`cliente_id`) REFERENCES `clientes`(`id`) ON DELETE SET NULL ON UPDATE CASCADE');
+        if ($this->db->DBDriver === 'MySQLi') {
+            $this->db->query('ALTER TABLE `ventas` ADD CONSTRAINT `ventas_cliente_id_foreign` FOREIGN KEY (`cliente_id`) REFERENCES `clientes`(`id`) ON DELETE SET NULL ON UPDATE CASCADE');
+        }
 
         // 3. Poblar tabla clientes con los clientes existentes en ventas
         $now = date('Y-m-d H:i:s');
@@ -98,7 +102,9 @@ class CreateClientesTable extends Migration
 
     public function down(): void
     {
-        $this->db->query('ALTER TABLE `ventas` DROP FOREIGN KEY `ventas_cliente_id_foreign`');
+        if ($this->db->DBDriver === 'MySQLi') {
+            $this->db->query('ALTER TABLE `ventas` DROP FOREIGN KEY `ventas_cliente_id_foreign`');
+        }
         $this->forge->dropColumn('ventas', ['cliente_id', 'cliente_telefono', 'cliente_email', 'cliente_direccion']);
         $this->forge->dropTable('clientes', true);
     }

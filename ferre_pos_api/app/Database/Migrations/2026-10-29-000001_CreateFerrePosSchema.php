@@ -8,7 +8,7 @@ class CreateFerrePosSchema extends Migration
 {
     public function up(): void
     {
-        $tableAttrs = ['ENGINE' => 'InnoDB', 'DEFAULT CHARSET' => 'utf8mb4', 'COLLATE' => 'utf8mb4_unicode_ci'];
+        $tableAttrs = $this->db->DBDriver === 'MySQLi' ? ['ENGINE' => 'InnoDB', 'DEFAULT CHARSET' => 'utf8mb4', 'COLLATE' => 'utf8mb4_unicode_ci'] : [];
 
         // 1. usuarios
         $this->forge->addField([
@@ -174,7 +174,7 @@ class CreateFerrePosSchema extends Migration
             'id'                => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true, 'auto_increment' => true],
             'numero_factura'    => ['type' => 'VARCHAR', 'constraint' => 40],
             'cliente_documento' => ['type' => 'VARCHAR', 'constraint' => 30],
-            'cliente_nombre'    => ['type' => 'VARCHAR', 'constraint' => 150],
+            'cliente_nombre'    => ['type' => 'VARCHAR', 'constraint' => 150, 'null' => true],
             'tasa_cambio_id'    => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true],
             'tasa_aplicada'     => ['type' => 'DECIMAL', 'constraint' => '12,4'],
             'subtotal_usd'      => ['type' => 'DECIMAL', 'constraint' => '14,2'],

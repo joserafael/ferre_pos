@@ -100,7 +100,8 @@ tests/coverage*
 # Do not save phpunit under version control.
 phpunit
 results/
-phpunit*.xml
+phpunit.xml
+!phpunit.dist.xml
 
 #-------------------------
 # Composer
