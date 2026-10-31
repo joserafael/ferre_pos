@@ -56,9 +56,9 @@ Após o script `setup.sh` criar seu projeto (ex: na pasta `meu_app_ci`), navegue
 ```bash
 cd nome_do_seu_projeto # Ex: cd meu_app_ci
 ```
-Copie o arquivo `env` para `.env` e configure as variáveis de ambiente da sua aplicação, especialmente as de banco de dados se forem diferentes dos padrões definidos no `docker-compose.yml`.
+Copie o arquivo `env_example` para `.env` e configure as variáveis de ambiente da sua aplicação, especialmente as de banco de dados se forem diferentes dos padrões definidos no `docker-compose.yml`.
 ```bash
-cp env .env
+cp env_example .env
 ```
 As configurações de banco de dados, Redis e e-mail no `docker-compose.yml` (seção `environment` do serviço `app`) são passadas para o CodeIgniter e geralmente sobrescrevem os valores do `.env`.
 
