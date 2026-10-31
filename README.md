@@ -174,3 +174,23 @@ docker compose down
 # Detener los contenedores y eliminar los volumenes de datos
 docker compose down -v
 ```
+
+## Pruebas Automatizadas (Testing)
+
+### Backend (PHPUnit 10)
+```bash
+# Ejecutar en Docker:
+docker exec -t ferre_pos_app ./vendor/bin/phpunit
+
+# O en local:
+cd ferre_pos_api && ./vendor/bin/phpunit
+```
+
+### Frontend (Vitest & Vue Test Utils)
+```bash
+# Ejecutar en Docker:
+docker exec -t ferre_pos_web npm run test
+
+# O en local:
+cd ferre_pos_web && npm run test
+```
