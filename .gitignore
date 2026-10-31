@@ -46,24 +46,51 @@ $RECYCLE.BIN/
 Vagrantfile
 
 #-------------------------
-# Temporary Files
+# Temporary Files & Caches
 #-------------------------
+.cache/
+*.cache
+.vite/
+.eslintcache
+.stylelintcache
+
 writable/cache/*
 !writable/cache/index.html
+ferre_pos_api/writable/cache/*
+!ferre_pos_api/writable/cache/index.html
 
 writable/logs/*
 !writable/logs/index.html
+ferre_pos_api/writable/logs/*
+!ferre_pos_api/writable/logs/index.html
 
 writable/session/*
 !writable/session/index.html
+ferre_pos_api/writable/session/*
+!ferre_pos_api/writable/session/index.html
 
 writable/uploads/*
 !writable/uploads/index.html
+ferre_pos_api/writable/uploads/*
+!ferre_pos_api/writable/uploads/index.html
 
 writable/debugbar/*
 !writable/debugbar/.gitkeep
+ferre_pos_api/writable/debugbar/*
+!ferre_pos_api/writable/debugbar/.gitkeep
 
 php_errors.log
+
+#-------------------------
+# Node / Frontend
+#-------------------------
+node_modules/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
 
 #-------------------------
 # Test Files
