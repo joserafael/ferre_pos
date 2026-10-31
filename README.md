@@ -6,7 +6,7 @@ Sistema integral de Punto de Venta (POS), control de inventario con soporte de u
 
 1. **Separacion Estricta**:
    - Backend y Frontend operan de forma independiente comunicandose exclusivamente mediante JSON sobre HTTP REST.
-2. **Backend (`ferre_pos_api` - CodeIgniter 4 / PHP 8.3-FPM)**:
+2. **Backend (`ferre_pos_api` - CodeIgniter 4 / PHP 8.4-FPM)**:
    - Controladores RESTful basados en `ResourceController` y `ResponseTrait`.
    - Autenticacion stateless mediante tokens JWT (HS256) a traves de filtro dedicado (`JwtAuthFilter`) y soporte CORS (`CorsFilter`).
    - Estandarizacion de respuestas JSON con la estructura `{"status": 200, "error": null, "messages": "...", "data": {...}}`.
@@ -78,7 +78,7 @@ ferre_pos/
 │   │   ├── stores/             # Stores de Pinia (auth, tasa, catalogos)
 │   │   └── views/              # Vistas: PosView, ProductosView, InventarioView, VentasView, TasasView, etc.
 │   └── vite.config.js          # Configuracion de Vite y proxy hacia el API
-├── Dockerfile.php              # Imagen PHP 8.3-FPM con extensiones mysqli, pdo_mysql, redis, intl, bcmath, gd
+├── Dockerfile.php              # Imagen PHP 8.4-FPM con extensiones mysqli, pdo_mysql, redis, intl, bcmath, gd
 ├── Dockerfile.web              # Imagen Node 20 Alpine para el servidor de desarrollo de Vue 3
 └── docker-compose.yml          # Orquestacion completa de contenedores
 ```
