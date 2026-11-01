@@ -2,6 +2,8 @@
 
 Sistema integral de Punto de Venta (POS), control de inventario con soporte de unidades fraccionadas y facturacion bimonetaria (Dolares USD y Bolivares VES) disenado para ferreterias en Venezuela. El proyecto implementa una arquitectura desacoplada conformada por un Backend RESTful API en CodeIgniter 4, base de datos relacional en MySQL 8.0 y un Frontend SPA en Vue 3, todo orquestado mediante Docker Compose.
 
+> Para consultar la guia detallada de operacion paso a paso (cobro bimonetario, inventario fraccionado, arqueos y kardex), revise el [Manual de Usuario](file:///Users/joserafaelcamejo/Codigos/ferre_pos/docs/MANUAL_DE_USUARIO.md).
+
 ## Arquitectura y Stack Tecnologico
 
 1. **Separacion Estricta**:
@@ -92,6 +94,8 @@ Consulta detallada de todos los movimientos de stock (`ENTRADA_COMPRA`, `SALIDA_
 
 ```text
 ferre_pos/
+├── docs/                       # Documentacion operativa y Manual de Usuario
+│   └── MANUAL_DE_USUARIO.md
 ├── docker/
 │   └── nginx/
 │       └── default.conf        # Configuracion de Nginx para el Backend API
