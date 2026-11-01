@@ -1,5 +1,5 @@
 # Using an official PHP image as base image
-FROM php:8.4-fpm-alpine
+FROM php:8.5-fpm-alpine
 
 # Set working directory
 WORKDIR /var/www/html
@@ -7,7 +7,7 @@ WORKDIR /var/www/html
 # Install system dependencies
 # build-base is for compiling extensions, mysql-client for pdo_mysql and mysql CLI
 # icu-dev for intl, libzip-dev for zip, libpng-dev/libjpeg-turbo-dev/freetype-dev for gd
-# oniguruma-dev for mbstring, hiredis-dev for redis PECL extension
+# hiredis-dev for redis PECL extension
 RUN apk update && apk add --no-cache \
     build-base \
     mysql-client \
@@ -17,13 +17,13 @@ RUN apk update && apk add --no-cache \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
-    oniguruma-dev \
     git \
     unzip \
     hiredis-dev
 
 # Install PHP extensions
 # Configure GD with FreeType and JPEG support
+# Note: In PHP 8.5, opcache and mbstring are already built-in
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
     pdo_mysql \
@@ -31,11 +31,9 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     zip \
     intl \
     gd \
-    mbstring \
     exif \
     pcntl \
-    bcmath \
-    opcache
+    bcmath
 
 # Install Redis PECL extension
 # build-base and hiredis-dev are already installed.
@@ -49,9 +47,7 @@ RUN apk add --no-cache --virtual .build-deps-redis autoconf \
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Clear Composer cache before trying to create the project
-# (Might be useful if we use composer create-project later)
 RUN composer clear-cache
-
 
 # Expose port 9000 and start php-fpm server
 EXPOSE 9000
