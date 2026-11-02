@@ -94,7 +94,8 @@ Consulta detallada de todos los movimientos de stock (`ENTRADA_COMPRA`, `SALIDA_
 
 ```text
 ferre_pos/
-├── docs/                       # Documentación operativa y Manual de Usuario
+├── docs/                       # Documentación operativa, manuales y colección API
+│   ├── FerrePOS_API.postman_collection.json # Colección oficial Postman v2.1
 │   └── MANUAL_DE_USUARIO.md
 ├── docker/
 │   └── nginx/
@@ -180,6 +181,8 @@ Una vez ejecutado el seeder `InitialFerrePosSeeder`, puede iniciar sesión en `h
   - Contraseña: `cajero123`
 
 ## Endpoints Principales de la API (`/api`)
+
+> Se incluye una colección lista para importar en [docs/FerrePOS_API.postman_collection.json](file:///Users/joserafaelcamejo/Codigos/ferre_pos/docs/FerrePOS_API.postman_collection.json) con todos los endpoints clasificados por carpetas, variables de entorno y captura automática de token JWT tras el login.
 
 - `POST /api/auth/login`: Autenticación de usuario y emisión de token JWT junto con la tasa activa.
 - `GET /api/auth/me`: Datos del usuario autenticado.

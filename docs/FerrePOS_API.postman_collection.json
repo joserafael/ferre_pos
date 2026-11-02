@@ -1,0 +1,1027 @@
+{
+	"info": {
+		"_postman_id": "c1f4e92a-3b7c-4a8d-9a1e-8e5f2a1b9c3d",
+		"name": "FerrePOS API - Colección Oficial",
+		"description": "Colección completa de endpoints RESTful para FerrePOS: Sistema POS, Inventario Fraccionado y Facturación Bimonetaria (USD / VES).\n\n### Instrucciones de uso:\n1. Ejecute la petición **01. Login (Administrador)** o **02. Login (Cajero)** dentro de la carpeta **Autenticación**.\n2. El script de prueba guardará automáticamente el token JWT en la variable de colección `{{jwt_token}}`.\n3. Todas las peticiones autenticadas consumen automáticamente este token como Bearer Token.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "admin_username",
+			"value": "admin",
+			"type": "string"
+		},
+		{
+			"key": "admin_password",
+			"value": "admin123",
+			"type": "string"
+		},
+		{
+			"key": "cajero_username",
+			"value": "cajero",
+			"type": "string"
+		},
+		{
+			"key": "cajero_password",
+			"value": "cajero123",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "01. Autenticación & Tasa Pública",
+			"item": [
+				{
+					"name": "Login (Administrador)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = pm.response.json();",
+									"if (jsonData.status === 200 && jsonData.data && jsonData.data.token) {",
+									"    pm.collectionVariables.set('jwt_token', jsonData.data.token);",
+									"    console.log('JWT Token asignado automáticamente para Administrador.');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{admin_username}}\",\n    \"password\": \"{{admin_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Autenticación de usuario. Guarda automáticamente el token JWT retornado en {{jwt_token}}."
+					},
+					"response": []
+				},
+				{
+					"name": "Login (Cajero)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const jsonData = pm.response.json();",
+									"if (jsonData.status === 200 && jsonData.data && jsonData.data.token) {",
+									"    pm.collectionVariables.set('jwt_token', jsonData.data.token);",
+									"    console.log('JWT Token asignado automáticamente para Cajero.');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{cajero_username}}\",\n    \"password\": \"{{cajero_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Inicio de sesión para rol Cajero con permisos exclusivos de Punto de Venta."
+					},
+					"response": []
+				},
+				{
+					"name": "Consultar Usuario Autenticado (Me)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"me"
+							]
+						},
+						"description": "Obtiene la información del usuario en sesión activa a partir del token JWT."
+					},
+					"response": []
+				},
+				{
+					"name": "Obtener Tasa Activa (Pública)",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/tasas/activa",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tasas",
+								"activa"
+							]
+						},
+						"description": "Consulta pública y en tiempo real de la tasa de cambio oficial activa (USD -> VES)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "02. Dashboard y Analítica",
+			"item": [
+				{
+					"name": "Obtener Resumen del Dashboard",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dashboard",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dashboard"
+							]
+						},
+						"description": "Métricas gerenciales: ventas de hoy (USD/VES), facturación acumulada, valorización de inventario a costo, recaudación por método de pago y monitor de stock crítico."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "03. Gestión de Tasas de Cambio",
+			"item": [
+				{
+					"name": "Listar Historial de Tasas",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/tasas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tasas"
+							]
+						},
+						"description": "Historial cronológico de tasas de cambio con fecha, hora y usuario que la registró."
+					},
+					"response": []
+				},
+				{
+					"name": "Registrar y Activar Nueva Tasa",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"tasa_ves\": 895.5000,\n    \"fuente\": \"BCV Oficial\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/tasas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"tasas"
+							]
+						},
+						"description": "Publica una nueva tasa oficial USD/VES desactivando automáticamente la anterior."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "04. Catálogos Base (Categorías, Unidades y Métodos de Pago)",
+			"item": [
+				{
+					"name": "Listar Categorías",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/categorias",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"categorias"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Crear Categoría",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nombre\": \"Cerrajería y Seguridad\",\n    \"descripcion\": \"Candados, cerraduras, cilindros y accesorios de seguridad\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/categorias",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"categorias"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Categoría",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nombre\": \"Cerrajería y Seguridad Industrial\",\n    \"descripcion\": \"Cerraduras de sobreponer, embutir y candados de alta seguridad\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/categorias/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"categorias",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar Categoría",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/categorias/99",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"categorias",
+								"99"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Unidades de Medida",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/unidades-medida",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"unidades-medida"
+							]
+						},
+						"description": "Lista unidades de medida indicando si permiten ventas con fracciones decimales (permite_decimales: 1)."
+					},
+					"response": []
+				},
+				{
+					"name": "Crear Unidad de Medida",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"codigo\": \"PLIEGO\",\n    \"nombre\": \"Pliego\",\n    \"permite_decimales\": 0\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/unidades-medida",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"unidades-medida"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Listar Métodos de Pago",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/metodos-pago",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"metodos-pago"
+							]
+						},
+						"description": "Catálogo de métodos de cobro en USD y VES y exigencia de referencia obligatoria."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "05. Catálogo de Productos",
+			"item": [
+				{
+					"name": "Listar Productos (Con Filtros)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/productos?categoria_id=&q=&stock_bajo=",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"productos"
+							],
+							"query": [
+								{
+									"key": "categoria_id",
+									"value": "",
+									"description": "Filtrar por ID de categoría"
+								},
+								{
+									"key": "q",
+									"value": "",
+									"description": "Búsqueda por SKU, nombre o código de barras"
+								},
+								{
+									"key": "stock_bajo",
+									"value": "",
+									"description": "1 para filtrar solo artículos con stock menor o igual al mínimo"
+								}
+							]
+						},
+						"description": "Retorna productos con precios calculados en USD y VES según la tasa activa."
+					},
+					"response": []
+				},
+				{
+					"name": "Obtener Detalle de Producto por ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/productos/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"productos",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Crear Producto (Con Factor de Conversión)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sku\": \"CAB-THW-10\",\n    \"nombre\": \"Cable THW #10 AWG 7 Pelos Cobre\",\n    \"descripcion\": \"Cable eléctrico 100% cobre para acometidas y circuitos de fuerza\",\n    \"categoria_id\": 2,\n    \"unidad_compra_id\": 6,\n    \"unidad_venta_id\": 2,\n    \"factor_conversion\": 100.000,\n    \"costo_usd\": 65.00,\n    \"precio_venta_usd\": 1.15,\n    \"alicuota_iva\": 16.00,\n    \"stock_minimo\": 50.000,\n    \"activo\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/productos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"productos"
+							]
+						},
+						"description": "Crea un producto. Si la unidad de compra (ej: ROLLO) difiere de la de venta (ej: METRO), factor_conversion define la equivalencia (100.000 M por ROLLO)."
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Producto",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nombre\": \"Cable THW #10 AWG 7 Pelos Cobre (Rojo)\",\n    \"precio_venta_usd\": 1.25,\n    \"costo_usd\": 68.00,\n    \"stock_minimo\": 60.000\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/productos/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"productos",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Eliminar / Desactivar Producto",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/productos/99",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"productos",
+								"99"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "06. Clientes",
+			"item": [
+				{
+					"name": "Listar Clientes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Buscar Cliente por Cédula o RIF",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/buscar?q=V-12345678",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"buscar"
+							],
+							"query": [
+								{
+									"key": "q",
+									"value": "V-12345678",
+									"description": "Cédula o RIF normalizado"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Crear Cliente",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"documento\": \"J-50123456-9\",\n    \"nombre\": \"Construcciones y Remodelaciones del Centro C.A.\",\n    \"telefono\": \"0414-1234567\",\n    \"email\": \"compras@construcentro.com\",\n    \"direccion\": \"Av. Bolívar, Galpón 4, Valencia, Carabobo\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Cliente",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"telefono\": \"0424-9876543\",\n    \"direccion\": \"Av. Bolívar, Edif. Torre Valencia, Piso 3\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/clientes/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"clientes",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "07. Facturación POS y Ventas Bimonetarias",
+			"item": [
+				{
+					"name": "Listar Ventas Realizadas",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/ventas?estado=&q=&usuario_id=",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"ventas"
+							],
+							"query": [
+								{
+									"key": "estado",
+									"value": "",
+									"description": "EMITIDA o ANULADA"
+								},
+								{
+									"key": "q",
+									"value": "",
+									"description": "Número de factura, documento o nombre del cliente"
+								},
+								{
+									"key": "usuario_id",
+									"value": "",
+									"description": "Filtrar por cajero específico"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Obtener Detalle de Factura por ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/ventas/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"ventas",
+								"1"
+							]
+						},
+						"description": "Retorna cabecera con tasa congelada, detalle de renglones vendidos y desglose de multipagos recibidos."
+					},
+					"response": []
+				},
+				{
+					"name": "Emitir Factura POS (Fraccionada con Multipago Mixto)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cliente_documento\": \"V-18765432\",\n    \"cliente_nombre\": \"Carlos Mendoza\",\n    \"cliente_telefono\": \"0412-5551234\",\n    \"cliente_direccion\": \"Calle Las Flores #12\",\n    \"cliente_email\": \"carlos.mendoza@email.com\",\n    \"descuento_usd\": 0.00,\n    \"vuelto_usd\": 0.00,\n    \"vuelto_ves\": 0.00,\n    \"items\": [\n        {\n            \"producto_id\": 1,\n            \"cantidad\": 2.500\n        },\n        {\n            \"producto_id\": 2,\n            \"cantidad\": 1.250\n        }\n    ],\n    \"pagos\": [\n        {\n            \"metodo_pago_id\": 2,\n            \"monto_original\": 10.00,\n            \"referencia\": null\n        },\n        {\n            \"metodo_pago_id\": 3,\n            \"monto_original\": 15000.00,\n            \"referencia\": \"LOT-89214\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/ventas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"ventas"
+							]
+						},
+						"description": "Emite factura POS descontando atómicamente el inventario en el Kardex y registrando pagos combinados en USD y VES."
+					},
+					"response": []
+				},
+				{
+					"name": "Anular Factura (Reverso en Kardex)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"motivo\": \"Devolución total por mercancía equivocada solicitada por el cliente\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/ventas/1/anular",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"ventas",
+								"1",
+								"anular"
+							]
+						},
+						"description": "Anula una factura emitida (solo ADMIN), revirtiendo atómicamente las existencias al inventario con movimiento ANULACION_VENTA."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "08. Inventario, Compras y Kardex Inmutable",
+			"item": [
+				{
+					"name": "Listar Entradas de Compra",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/inventario/entradas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"inventario",
+								"entradas"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Obtener Detalle de Entrada de Compra",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/inventario/entradas/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"inventario",
+								"entradas",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Registrar Entrada de Compra (Bimonetaria)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"numero_documento\": \"FACT-PROV-90812\",\n    \"proveedor_nombre\": \"Distribuidora Ferretera Nacional C.A.\",\n    \"moneda_ingreso\": \"USD\",\n    \"observacion\": \"Reposición de cableado y clavos para almacén principal\",\n    \"items\": [\n        {\n            \"producto_id\": 1,\n            \"cantidad_comprada\": 2.000,\n            \"costo_compra_unitario\": 65.00,\n            \"nuevo_precio_venta_usd\": 1.10\n        },\n        {\n            \"producto_id\": 2,\n            \"cantidad_comprada\": 50.000,\n            \"costo_compra_unitario\": 1.80,\n            \"nuevo_precio_venta_usd\": 2.70\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/inventario/entradas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"inventario",
+								"entradas"
+							]
+						},
+						"description": "Registra una compra aplicando factor de conversión automático y actualizando costos y existencias en el Kardex."
+					},
+					"response": []
+				},
+				{
+					"name": "Registrar Ajuste de Inventario (+ / -)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"producto_id\": 1,\n    \"tipo_movimiento\": \"AJUSTE_POSITIVO\",\n    \"cantidad\": 5.500,\n    \"observacion\": \"Sobrante físico hallado en arqueo mensual de cables\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/inventario/ajustes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"inventario",
+								"ajustes"
+							]
+						},
+						"description": "Registra ajustes manuales (AJUSTE_POSITIVO o AJUSTE_NEGATIVO) con validación de stock y tipo de unidad."
+					},
+					"response": []
+				},
+				{
+					"name": "Consultar Kardex Inmutable (Filtros)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/inventario/kardex?producto_id=&tipo_movimiento=&limit=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"inventario",
+								"kardex"
+							],
+							"query": [
+								{
+									"key": "producto_id",
+									"value": "",
+									"description": "ID de producto específico"
+								},
+								{
+									"key": "tipo_movimiento",
+									"value": "",
+									"description": "ENTRADA_COMPRA, SALIDA_VENTA, ANULACION_VENTA, AJUSTE_POSITIVO, AJUSTE_NEGATIVO"
+								},
+								{
+									"key": "limit",
+									"value": "100",
+									"description": "Límite de registros (máximo 250)"
+								}
+							]
+						},
+						"description": "Auditoría granular de saldos anteriores, cantidad movida, saldos resultantes y costos bimonetarios."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "09. Gestión de Cajeros",
+			"item": [
+				{
+					"name": "Listar Cajeros",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/cajeros",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cajeros"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Crear Cajero",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"cajero2\",\n    \"password\": \"cajero123\",\n    \"nombre\": \"María Pérez\",\n    \"email\": \"maria.perez@ferrepos.com\",\n    \"telefono\": \"0414-9988776\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/cajeros",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cajeros"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Actualizar Cajero",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nombre\": \"María Pérez González\",\n    \"telefono\": \"0414-1122334\",\n    \"activo\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/cajeros/2",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cajeros",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Histórico de Ventas de un Cajero",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/cajeros/2/ventas",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cajeros",
+								"2",
+								"ventas"
+							]
+						},
+						"description": "Reporte de facturas y volumen total liquidado por un cajero particular."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
