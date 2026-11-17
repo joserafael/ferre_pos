@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
 import { usePosStore } from '@/stores/posStore'
@@ -7,14 +7,17 @@ import { usePosStore } from '@/stores/posStore'
 const tasaStore = useTasaStore()
 const posStore = usePosStore()
 
-const productos = ref([])
-const categorias = ref([])
 const metodosPago = ref([])
 const busqueda = ref('')
-const categoriaSeleccionada = ref(null)
+const resultadosBusqueda = ref([])
+const recientes = ref([])
+const indiceSeleccionado = ref(0)
+const buscandoProductos = ref(false)
+const searchInputRef = ref(null)
 const cargando = ref(false)
 const alertaError = ref('')
 const alertaExito = ref('')
+let debounceTimer = null
 
 // Modal Multipago
 const modalPago = ref(false)
@@ -110,13 +113,7 @@ async function guardarClienteRapido() {
 async function cargarDatosPos() {
   cargando.value = true
   try {
-    const [resProd, resCat, resMet] = await Promise.all([
-      api.get('/productos?activos=1'),
-      api.get('/categorias?activas=1'),
-      api.get('/metodos-pago')
-    ])
-    productos.value = resProd.data || []
-    categorias.value = resCat.data || []
+    const resMet = await api.get('/metodos-pago')
     metodosPago.value = resMet.data || []
     if (metodosPago.value.length && !metodoSeleccionadoId.value) {
       metodoSeleccionadoId.value = metodosPago.value[0].id
@@ -126,25 +123,123 @@ async function cargarDatosPos() {
   }
 }
 
-onMounted(cargarDatosPos)
-
-const productosFiltrados = computed(() => {
-  const q = busqueda.value.trim().toLowerCase()
-  return productos.value.filter((p) => {
-    const matchCat = !categoriaSeleccionada.value || p.categoria_id === categoriaSeleccionada.value
-    const matchQ =
-      !q ||
-      p.nombre.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q) ||
-      (p.codigo_barra && p.codigo_barra.toLowerCase().includes(q))
-    return matchCat && matchQ
-  })
+onMounted(() => {
+  cargarDatosPos()
+  nextTick(() => searchInputRef.value?.focus())
 })
 
-function clickProducto(prod, cant = 1) {
+async function ejecutarBusqueda(texto) {
+  const q = texto.trim()
+  if (!q) {
+    resultadosBusqueda.value = []
+    indiceSeleccionado.value = 0
+    return []
+  }
+
+  buscandoProductos.value = true
+  try {
+    const res = await api.get(
+      `/productos?activos=1&page=1&per_page=20&q=${encodeURIComponent(q)}`
+    )
+    const items = res.data?.items || []
+    resultadosBusqueda.value = items
+    indiceSeleccionado.value = 0
+    return items
+  } catch (e) {
+    alertaError.value = e.message
+    return []
+  } finally {
+    buscandoProductos.value = false
+  }
+}
+
+function alEscribirBusqueda() {
+  clearTimeout(debounceTimer)
+  const q = busqueda.value.trim()
+  if (!q) {
+    resultadosBusqueda.value = []
+    indiceSeleccionado.value = 0
+    return
+  }
+  debounceTimer = setTimeout(() => {
+    ejecutarBusqueda(q)
+  }, 180)
+}
+
+function limpiarBusqueda() {
+  clearTimeout(debounceTimer)
+  busqueda.value = ''
+  resultadosBusqueda.value = []
+  indiceSeleccionado.value = 0
+  nextTick(() => searchInputRef.value?.focus())
+}
+
+async function manejarTeclaBusqueda(e) {
+  if (e.key === 'ArrowDown') {
+    if (resultadosBusqueda.value.length) {
+      e.preventDefault()
+      indiceSeleccionado.value =
+        (indiceSeleccionado.value + 1) % resultadosBusqueda.value.length
+    }
+    return
+  }
+
+  if (e.key === 'ArrowUp') {
+    if (resultadosBusqueda.value.length) {
+      e.preventDefault()
+      indiceSeleccionado.value =
+        (indiceSeleccionado.value - 1 + resultadosBusqueda.value.length) %
+        resultadosBusqueda.value.length
+    }
+    return
+  }
+
+  if (e.key === 'Escape') {
+    limpiarBusqueda()
+    return
+  }
+
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    const q = busqueda.value.trim()
+    if (!q) return
+
+    clearTimeout(debounceTimer)
+    // Si aún no hay resultados (ej. escaneo rápido de código de barras), consultamos de inmediato
+    let lista = resultadosBusqueda.value
+    if (!lista.length || buscandoProductos.value) {
+      lista = await ejecutarBusqueda(q)
+    }
+    if (!lista.length) return
+
+    // Priorizar coincidencia exacta de código de barras o SKU; si no, el ítem resaltado
+    const qLower = q.toLowerCase()
+    const exacto = lista.find(
+      (p) =>
+        (p.codigo_barra && p.codigo_barra.toLowerCase() === qLower) ||
+        p.sku.toLowerCase() === qLower
+    )
+    const elegido = exacto || lista[indiceSeleccionado.value] || lista[0]
+    if (elegido && Number(elegido.stock_actual) > 0) {
+      clickProducto(elegido, 1, true)
+    } else if (elegido) {
+      alertaError.value = `El producto "${elegido.nombre}" no tiene stock disponible.`
+    }
+  }
+}
+
+function clickProducto(prod, cant = 1, limpiarDespues = false) {
   alertaError.value = ''
   try {
     posStore.agregarProducto(prod, cant)
+    // Guardar en accesos recientes de esta sesión (máximo 6)
+    recientes.value = [
+      prod,
+      ...recientes.value.filter((r) => r.id !== prod.id)
+    ].slice(0, 6)
+    if (limpiarDespues) {
+      limpiarBusqueda()
+    }
   } catch (e) {
     alertaError.value = e.message
   }
@@ -302,32 +397,36 @@ async function confirmarFacturaBimonetaria() {
 
 <template>
   <div class="pos-layout">
-    <!-- Columna Izquierda: Buscador y Catálogo Ferretero -->
+    <!-- Columna Izquierda: Buscador Inteligente Autocomplete -->
     <div class="pos-catalog">
-      <div class="card" style="margin-bottom: 1rem">
-        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center">
+      <div class="card search-card" style="margin-bottom: 1rem">
+        <div class="search-input-wrap">
           <input
+            ref="searchInputRef"
             v-model="busqueda"
             type="text"
-            class="form-control"
-            style="flex: 1; min-width: 220px"
-            placeholder="🔍 Buscar por código de barras, SKU o nombre (ej. Cable, Clavo, Cemento)..."
+            class="form-control search-input-lg"
+            placeholder="🔍 Escribe el nombre, SKU o escanea el código de barras..."
             autofocus
+            @input="alEscribirBusqueda"
+            @keydown="manejarTeclaBusqueda"
           />
+          <span v-if="buscandoProductos" class="search-status">Buscando...</span>
           <button
-            :class="['btn btn-sm', !categoriaSeleccionada ? 'btn-dark' : 'btn-outline']"
-            @click="categoriaSeleccionada = null"
+            v-else-if="busqueda"
+            type="button"
+            class="btn btn-outline btn-sm clear-search-btn"
+            @click="limpiarBusqueda"
+            title="Limpiar búsqueda (Esc)"
           >
-            Todas
+            ✕
           </button>
-          <button
-            v-for="cat in categorias"
-            :key="cat.id"
-            :class="['btn btn-sm', categoriaSeleccionada === cat.id ? 'btn-primary' : 'btn-outline']"
-            @click="categoriaSeleccionada = cat.id"
-          >
-            {{ cat.nombre }}
-          </button>
+        </div>
+
+        <div class="search-hints">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> Navegar</span>
+          <span><kbd>Enter</kbd> Agregar al ticket</span>
+          <span><kbd>Esc</kbd> Limpiar</span>
         </div>
       </div>
 
@@ -338,48 +437,97 @@ async function confirmarFacturaBimonetaria() {
         ✓ {{ alertaExito }}
       </div>
 
-      <!-- Grilla de Productos -->
-      <div class="product-grid">
-        <div
-          v-for="p in productosFiltrados"
-          :key="p.id"
-          class="product-card card"
-          :class="{ 'out-of-stock': p.stock_actual <= 0 }"
-        >
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.4rem">
-            <span class="mono" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700">
-              {{ p.sku }}
-            </span>
-            <span :class="['badge', p.permite_decimales ? 'badge-amber' : 'badge-ves']">
-              {{ p.unidad_venta_codigo }} {{ p.permite_decimales ? '(Fraccionable)' : '(Entero)' }}
-            </span>
+      <!-- Resultados del Autocomplete en tiempo real -->
+      <div v-if="busqueda.trim()" class="card autocomplete-panel">
+        <div v-if="buscandoProductos && !resultadosBusqueda.length" class="autocomplete-empty">
+          Buscando coincidencias para "<strong>{{ busqueda }}</strong>"...
+        </div>
+
+        <div v-else-if="!resultadosBusqueda.length" class="autocomplete-empty">
+          No se encontraron productos activos para "<strong>{{ busqueda }}</strong>".
+        </div>
+
+        <div v-else class="autocomplete-list">
+          <div
+            v-for="(p, idx) in resultadosBusqueda"
+            :key="p.id"
+            class="autocomplete-item"
+            :class="{
+              'is-active': idx === indiceSeleccionado,
+              'out-of-stock': p.stock_actual <= 0
+            }"
+            @mouseenter="indiceSeleccionado = idx"
+          >
+            <div class="ac-main" @click="p.stock_actual > 0 && clickProducto(p, 1, true)">
+              <div class="ac-meta">
+                <span class="mono ac-sku">{{ p.sku }}</span>
+                <span v-if="p.codigo_barra" class="mono ac-barcode">· {{ p.codigo_barra }}</span>
+                <span v-if="p.categoria_nombre" class="badge badge-amber ac-cat">{{ p.categoria_nombre }}</span>
+                <span :class="['badge', p.permite_decimales ? 'badge-amber' : 'badge-ves']">
+                  {{ p.unidad_venta_codigo }}
+                </span>
+              </div>
+              <div class="ac-title">{{ p.nombre }}</div>
+              <div class="ac-stock">
+                Stock disponible:
+                <strong class="mono" :style="{ color: p.stock_actual <= p.stock_minimo ? 'var(--danger)' : 'inherit' }">
+                  {{ Number(p.stock_actual).toFixed(p.permite_decimales ? 3 : 0) }} {{ p.unidad_venta_codigo }}
+                </strong>
+              </div>
+            </div>
+
+            <div class="ac-right">
+              <div class="ac-prices">
+                <div class="price-usd mono">{{ tasaStore.formatUsd(p.precio_venta_usd) }}</div>
+                <div class="price-ves mono">{{ tasaStore.formatVes(p.precio_venta_usd * tasaStore.tasaVes) }}</div>
+              </div>
+
+              <div class="ac-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  :disabled="p.stock_actual <= 0"
+                  @click="clickProducto(p, 1, true)"
+                >
+                  + Agregar
+                </button>
+                <div v-if="p.permite_decimales && p.stock_actual > 0" class="ac-fractions">
+                  <button type="button" class="btn btn-outline btn-sm" @click="clickProducto(p, 0.25, true)">+0.25</button>
+                  <button type="button" class="btn btn-outline btn-sm" @click="clickProducto(p, 0.5, true)">+0.50</button>
+                  <button type="button" class="btn btn-outline btn-sm" @click="clickProducto(p, 2.5, true)">+2.50</button>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
 
-          <div class="prod-name">{{ p.nombre }}</div>
+      <!-- Estado Inicial Limpio (cuando no se está escribiendo) -->
+      <div v-else class="card pos-idle-card">
+        <div class="idle-hero">
+          <div style="font-size: 2rem; margin-bottom: 0.4rem">🛒</div>
+          <h3 style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.35rem">
+            Listo para facturar
+          </h3>
+          <p style="color: var(--text-muted); font-size: 0.88rem; max-width: 440px; margin: 0 auto">
+            Empieza a escribir el nombre o SKU del producto en el buscador superior, o escanea directamente el código de barras para añadirlo al ticket.
+          </p>
+        </div>
 
-          <div class="prod-prices">
-            <div class="price-usd mono">{{ tasaStore.formatUsd(p.precio_venta_usd) }}</div>
-            <div class="price-ves mono">{{ tasaStore.formatVes(p.precio_venta_usd * tasaStore.tasaVes) }}</div>
-          </div>
-
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.55rem">
-            <span style="font-size: 0.76rem; color: var(--text-muted)">
-              Stock: <strong class="mono">{{ Number(p.stock_actual).toFixed(p.permite_decimales ? 3 : 0) }} {{ p.unidad_venta_codigo }}</strong>
-            </span>
+        <div v-if="recientes.length" class="recents-section">
+          <div class="recents-title">Agregados recientemente en esta sesión</div>
+          <div class="recents-grid">
             <button
-              class="btn btn-primary btn-sm"
-              :disabled="p.stock_actual <= 0"
-              @click="clickProducto(p, 1)"
+              v-for="r in recientes"
+              :key="r.id"
+              type="button"
+              class="recent-chip"
+              :disabled="r.stock_actual <= 0"
+              @click="clickProducto(r, 1, false)"
             >
-              + Agregar
+              <span class="recent-name">{{ r.nombre }}</span>
+              <span class="mono recent-price">{{ tasaStore.formatUsd(r.precio_venta_usd) }}</span>
             </button>
-          </div>
-
-          <!-- Botones rápidos para venta fraccionada (metros, kilos, litros) -->
-          <div v-if="p.permite_decimales && p.stock_actual > 0" class="quick-fractions">
-            <button type="button" class="btn btn-outline btn-sm" @click="clickProducto(p, 0.25)">+0.25 {{ p.unidad_venta_codigo }}</button>
-            <button type="button" class="btn btn-outline btn-sm" @click="clickProducto(p, 0.5)">+0.50 {{ p.unidad_venta_codigo }}</button>
-            <button type="button" class="btn btn-outline btn-sm" @click="clickProducto(p, 2.5)">+2.50 {{ p.unidad_venta_codigo }}</button>
           </div>
         </div>
       </div>
@@ -818,69 +966,236 @@ async function confirmarFacturaBimonetaria() {
   align-items: start;
 }
 
-.product-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
-  gap: 0.9rem;
+.search-card {
+  padding: 1rem;
 }
 
-.product-card {
+.search-input-wrap {
+  position: relative;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+}
+
+.search-input-lg {
+  font-size: 1rem;
+  padding: 0.75rem 4.5rem 0.75rem 0.9rem;
+  border-width: 2px;
+}
+
+.search-status {
+  position: absolute;
+  right: 0.85rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 0.65rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.search-hints {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.55rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.search-hints kbd {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0.08rem 0.35rem;
+  font-size: 0.7rem;
+  font-family: inherit;
+  font-weight: 700;
+  color: #334155;
+}
+
+.autocomplete-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.autocomplete-empty {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.autocomplete-list {
+  max-height: calc(100vh - 235px);
+  overflow-y: auto;
+}
+
+.autocomplete-item {
+  display: flex;
   justify-content: space-between;
-  transition: transform 0.12s, box-shadow 0.12s;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.1s;
 }
 
-.product-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+.autocomplete-item:last-child {
+  border-bottom: none;
 }
 
-.product-card.out-of-stock {
+.autocomplete-item.is-active {
+  background: #f8fafc;
+  box-shadow: inset 3px 0 0 var(--primary, #f59e0b);
+}
+
+.autocomplete-item.out-of-stock {
   opacity: 0.55;
 }
 
-.prod-name {
-  font-weight: 700;
-  font-size: 0.9rem;
-  margin: 0.45rem 0;
-  min-height: 2.5rem;
+.ac-main {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
 }
 
-.prod-prices {
-  background: #f8fafc;
-  padding: 0.5rem 0.65rem;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+.ac-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.ac-sku {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.ac-barcode {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.ac-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  margin-bottom: 0.25rem;
+  word-break: break-word;
+}
+
+.ac-stock {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ac-right {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-shrink: 0;
+}
+
+.ac-prices {
+  text-align: right;
+  min-width: 95px;
+}
+
+.ac-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.ac-fractions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.ac-fractions button {
+  font-size: 0.68rem;
+  padding: 0.15rem 0.35rem;
+}
+
+.pos-idle-card {
+  padding: 2.25rem 1.5rem;
+}
+
+.idle-hero {
+  text-align: center;
+}
+
+.recents-section {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.recents-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.65rem;
+}
+
+.recents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.55rem;
+}
+
+.recent-chip {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background-color 0.12s;
+}
+
+.recent-chip:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: var(--primary, #f59e0b);
+}
+
+.recent-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-price {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--usd-green);
+  flex-shrink: 0;
 }
 
 .price-usd {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 800;
   color: var(--usd-green);
 }
 
 .price-ves {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: var(--ves-blue);
-}
-
-.quick-fractions {
-  display: flex;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--border-color);
-}
-
-.quick-fractions button {
-  flex: 1;
-  font-size: 0.7rem;
-  padding: 0.25rem;
 }
 
 .pos-cart {
