@@ -18,6 +18,7 @@ services:
       database.default.password: ${MYSQL_PASSWORD:-password}
       database.default.DBDriver: MySQLi
       # Redis (for CodeIgniter cache)
+      cache.handler: redis
       cache.redis.host: redis
       cache.redis.password:
       cache.redis.port: 6379

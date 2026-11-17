@@ -3,6 +3,7 @@
 namespace App\Filters;
 
 use App\Libraries\JwtLib;
+use App\Libraries\RedisService;
 use CodeIgniter\Filters\FilterInterface;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -32,11 +33,41 @@ class JwtAuthFilter implements FilterInterface
                 ]);
         }
 
+        $rawToken = $matches[1];
+
+        // 1. Verificación instantánea en lista negra de Redis
+        if (RedisService::isTokenBlacklisted($rawToken)) {
+            return service('response')
+                ->setStatusCode(401)
+                ->setJSON([
+                    'status'   => 401,
+                    'error'    => 'TOKEN_REVOKED',
+                    'messages' => 'La sesión ha sido cerrada o el token fue revocado.',
+                    'data'     => null,
+                ]);
+        }
+
         try {
             $jwt     = new JwtLib();
-            $payload = $jwt->decode($matches[1]);
-            // Adjuntamos el usuario autenticado globalmente para los controladores
-            $request->user = $payload;
+            $payload = $jwt->decode($rawToken);
+
+            // 2. Verificación de revocación masiva de sesiones por usuario
+            $uid = (int) ($payload['uid'] ?? 0);
+            $iat = isset($payload['iat']) ? (int) $payload['iat'] : null;
+            if ($uid > 0 && RedisService::isUserSessionRevoked($uid, $iat)) {
+                return service('response')
+                    ->setStatusCode(401)
+                    ->setJSON([
+                        'status'   => 401,
+                        'error'    => 'SESSION_REVOKED',
+                        'messages' => 'Las sesiones de este usuario han sido invalidadas por un administrador.',
+                        'data'     => null,
+                    ]);
+            }
+
+            // Adjuntamos el usuario autenticado y el token globalmente para los controladores
+            $request->user  = $payload;
+            $request->token = $rawToken;
 
             // Validación de rol si el filtro recibe argumentos (ej. jwt:ADMIN)
             if (!empty($arguments)) {

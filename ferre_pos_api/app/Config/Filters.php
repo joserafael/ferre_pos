@@ -32,6 +32,7 @@ class Filters extends BaseFilters
         'secureheaders' => SecureHeaders::class,
         'cors'          => \App\Filters\CorsFilter::class,
         'jwt'           => \App\Filters\JwtAuthFilter::class,
+        'ratelimit'     => \App\Filters\RateLimitFilter::class,
         'forcehttps'    => ForceHTTPS::class,
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
@@ -108,5 +109,10 @@ class Filters extends BaseFilters
      *
      * @var array<string, array<string, list<string>>>
      */
-    public array $filters = [];
+    public array $filters = [
+        'ratelimit' => [
+            'before' => ['api/*'],
+            'after'  => ['api/*'],
+        ],
+    ];
 }

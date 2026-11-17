@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\RedisService;
 use App\Models\MovimientoInventarioModel;
 use App\Models\ProductoModel;
 use App\Models\TasaCambioModel;
@@ -16,8 +17,34 @@ class ProductoController extends ApiController
         $categoriaId = $this->request->getGet('categoria_id') ? (int) $this->request->getGet('categoria_id') : null;
         $soloActivos = $this->request->getGet('activos') !== null ? (bool) $this->request->getGet('activos') : false;
 
+        $cacheKey = null;
+        if (empty($search)) {
+            $cacheKey = 'productos:cat_' . ($categoriaId ?? 'all') . '_act_' . ($soloActivos ? '1' : '0');
+            $cached   = RedisService::getCached($cacheKey);
+            if ($cached !== null) {
+                // Ajustamos en tiempo real el stock disponible con las reservas activas en Redis
+                foreach ($cached as &$p) {
+                    $reservado               = RedisService::getReservedStock($p['id']);
+                    $p['stock_reservado']    = $reservado;
+                    $p['stock_disponible']   = max(0.000, round((float) $p['stock_actual'] - $reservado, 3));
+                }
+                return $this->apiResponse($cached, 'Catálogo de productos obtenido (caché).');
+            }
+        }
+
         $model     = new ProductoModel();
         $productos = $model->getConRelaciones($search, $categoriaId, $soloActivos);
+
+        if ($cacheKey !== null) {
+            RedisService::setCached($cacheKey, $productos, 600);
+        }
+
+        // Agregar stock_reservado y stock_disponible dinámicos
+        foreach ($productos as &$p) {
+            $reservado             = RedisService::getReservedStock($p['id']);
+            $p['stock_reservado']  = $reservado;
+            $p['stock_disponible'] = max(0.000, round((float) $p['stock_actual'] - $reservado, 3));
+        }
 
         return $this->apiResponse($productos, 'Catálogo de productos obtenido.');
     }
@@ -145,6 +172,8 @@ class ProductoController extends ApiController
             return $this->apiError('Error al registrar el producto en la base de datos.', 500, 'DB_TRANSACTION_ERROR');
         }
 
+        RedisService::invalidateProducts();
+
         return $this->show($productoId)->setStatusCode(201);
     }
 
@@ -202,6 +231,8 @@ class ProductoController extends ApiController
             'activo'            => $activo,
         ]);
 
+        RedisService::invalidateProducts();
+
         return $this->show($id);
     }
 
@@ -215,6 +246,7 @@ class ProductoController extends ApiController
         }
 
         $model->update($id, ['activo' => 0]);
+        RedisService::invalidateProducts();
 
         return $this->apiResponse(['id' => (int) $id, 'activo' => 0], 'Producto desactivado exitosamente.');
     }

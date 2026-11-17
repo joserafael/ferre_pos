@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\RedisService;
 use App\Models\TasaCambioModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -73,6 +74,10 @@ class TasaCambioController extends ApiController
         if ($db->transStatus() === false) {
             return $this->apiError('Error al registrar la nueva tasa de cambio.', 500, 'DB_TRANSACTION_ERROR');
         }
+
+        // Invalidar caché de tasa y catálogo en Redis para refresco inmediato en todos los POS
+        RedisService::invalidateTasa();
+        RedisService::invalidateCatalog();
 
         return $this->apiResponse($model->getActiva(), 'Tasa de cambio actualizada exitosamente.', 201);
     }

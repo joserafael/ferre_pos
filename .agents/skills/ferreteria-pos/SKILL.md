@@ -19,7 +19,14 @@ Actúa como un Arquitecto de Software Senior y Desarrollador Full-Stack especial
    - Tasas de cambio (`tasa_cambio`): `DECIMAL(12,4)`.
    - Cantidades e inventario (`stock`, `cantidad_vendida`): `DECIMAL(12,3)` para soportar ventas fraccionadas (metros, kilos, gramos).
    - Uso obligatorio de transacciones (`$db->transStart()` / `$db->transComplete()`) al registrar compras, ventas, pagos o movimientos de stock.
-4. **Frontend (SPA - Vue 3):**
+4. **Caché en Memoria y Concurrencia (Redis 6+):**
+   - Manejador de caché primario en CodeIgniter 4 (`ext-redis`).
+   - Caché en memoria (<1 ms) para la tasa de cambio activa y catálogos de alta consulta (`categorias`, `unidades_medida`, `metodos_pago`, `productos`).
+   - Invalidación atómica de caché al actualizar tasas, productos, categorías o registrar movimientos de inventario/ventas.
+   - Bloqueo distribuido (Mutex `SET NX EX` y Lua scripts) para checkout concurrente en POS multi-caja.
+   - Reservas temporales de stock por carrito con expiración automática (TTL) para prevenir sobreventa entre cajeros.
+   - Rate limiting por IP/ruta y lista negra (Blacklist) en memoria para revocación inmediata de tokens JWT y cierre de sesiones.
+5. **Frontend (SPA - Vue 3):**
    - Vue 3 con Composition API (`<script setup>`), Pinia, Vue Router y Axios.
    - Interfaz POS que muestra simultáneamente precios y totales en **USD ($)** y **Bolívares (Bs.)** calculados en tiempo real según la tasa activa.
 
@@ -44,6 +51,11 @@ Actúa como un Arquitecto de Software Senior y Desarrollador Full-Stack especial
      - `ZELLE` (USD - requiere referencia)
      - `PAGO_MOVIL` (VES - requiere referencia)
    - Soporte de pagos mixtos (1 factura puede tener múltiples registros en `venta_pagos` combinando USD y VES) y registro de vuelto en USD y/o VES.
+5. **Concurrencia, Stock Multi-caja y Seguridad con Redis:**
+   - **Tasa y Catálogos en Caché:** La tasa activa se recupera en sub-milisegundo desde Redis (`ferrepos:tasa:activa`) y se auto-invalida junto con los catálogos al registrar una nueva tasa o modificar inventario.
+   - **Stock Disponible Real:** El stock disponible para venta en POS considera tanto el stock físico en MySQL como las reservas temporales de otros carritos activos (`stock_disponible = stock_actual - stock_reservado_otros`).
+   - **Cerrojos Atómicos (Mutex):** El proceso de checkout adquiere locks distribuidos (`ferrepos:lock:prod:{id}`) en Redis para evitar colisiones simultáneas entre cajeros.
+   - **Seguridad JWT y Rate Limiting:** Verificación en lista negra (`ferrepos:jwt:blacklist:*`) en cada petición HTTP y control de tasa (15 req/min en login, 180 req/min en API general).
 
 # ESQUEMA BASE DE DATOS DE REFERENCIA
 - `tasas_cambio`: `id`, `tasa_ves` DECIMAL(12,4), `fuente`, `activa` TINYINT(1), `usuario_id`, `created_at`

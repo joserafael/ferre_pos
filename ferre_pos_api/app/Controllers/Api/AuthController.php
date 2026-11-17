@@ -3,6 +3,7 @@
 namespace App\Controllers\Api;
 
 use App\Libraries\JwtLib;
+use App\Libraries\RedisService;
 use App\Models\TasaCambioModel;
 use App\Models\UsuarioModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -79,5 +80,26 @@ class AuthController extends ApiController
             ],
             'tasa_activa' => $tasaActiva,
         ], 'Sesión válida.');
+    }
+
+    public function logout(): ResponseInterface
+    {
+        $rawToken = $this->request->token ?? null;
+        if (!$rawToken) {
+            $authHeader = $this->request->getHeaderLine('Authorization');
+            if (preg_match('/Bearer\s+(\S+)/i', $authHeader, $matches)) {
+                $rawToken = $matches[1];
+            }
+        }
+
+        if ($rawToken) {
+            $auth = $this->getAuthUser();
+            $exp  = isset($auth['exp']) ? (int) $auth['exp'] : (time() + 86400);
+            $ttl  = max(60, $exp - time());
+
+            RedisService::blacklistToken($rawToken, $ttl);
+        }
+
+        return $this->apiResponse(null, 'Sesión cerrada y token revocado exitosamente.');
     }
 }

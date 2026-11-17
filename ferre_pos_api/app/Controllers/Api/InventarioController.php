@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\RedisService;
 use App\Models\EntradaDetalleModel;
 use App\Models\EntradaInventarioModel;
 use App\Models\MovimientoInventarioModel;
@@ -227,6 +228,8 @@ class InventarioController extends ApiController
             return $this->apiError('Error en la transacción al registrar la entrada de inventario.', 500, 'DB_TRANSACTION_ERROR');
         }
 
+        RedisService::invalidateProducts();
+
         return $this->showEntrada($entradaId)->setStatusCode(201);
     }
 
@@ -298,6 +301,8 @@ class InventarioController extends ApiController
         if ($db->transStatus() === false) {
             return $this->apiError('Error al procesar el ajuste de inventario.', 500, 'DB_TRANSACTION_ERROR');
         }
+
+        RedisService::invalidateProducts();
 
         return $this->apiResponse($kardexModel->find($movimientoId), 'Ajuste de inventario registrado en el Kardex.', 201);
     }

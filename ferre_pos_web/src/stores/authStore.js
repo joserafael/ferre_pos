@@ -25,11 +25,19 @@ export const useAuthStore = defineStore('auth', () => {
     return res.data
   }
 
-  function logout() {
-    token.value = ''
-    usuario.value = null
-    localStorage.removeItem('ferrepos_token')
-    localStorage.removeItem('ferrepos_user')
+  async function logout() {
+    try {
+      if (token.value) {
+        await api.post('/auth/logout')
+      }
+    } catch (_) {
+      // Si falla la red, el cliente igual limpia su sesión local
+    } finally {
+      token.value = ''
+      usuario.value = null
+      localStorage.removeItem('ferrepos_token')
+      localStorage.removeItem('ferrepos_user')
+    }
   }
 
   return {

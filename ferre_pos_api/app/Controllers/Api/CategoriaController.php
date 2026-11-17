@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\RedisService;
 use App\Models\CategoriaModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -10,7 +11,14 @@ class CategoriaController extends ApiController
     public function index(): ResponseInterface
     {
         $soloActivas = (bool) $this->request->getGet('activas');
-        $builder     = \Config\Database::connect()->table('categorias c')
+        $cacheKey    = 'categorias:' . ($soloActivas ? 'activas' : 'todas');
+
+        $cached = RedisService::getCached($cacheKey);
+        if ($cached !== null) {
+            return $this->apiResponse($cached, 'Categorías obtenidas (caché).');
+        }
+
+        $builder = \Config\Database::connect()->table('categorias c')
             ->select('c.*, COUNT(p.id) as total_productos')
             ->join('productos p', 'p.categoria_id = c.id', 'left')
             ->groupBy('c.id')
@@ -26,6 +34,8 @@ class CategoriaController extends ApiController
             $r['activo']          = (int) $r['activo'];
             $r['total_productos'] = (int) $r['total_productos'];
         }
+
+        RedisService::setCached($cacheKey, $rows, 1800);
 
         return $this->apiResponse($rows, 'Categorías obtenidas.');
     }
@@ -51,6 +61,8 @@ class CategoriaController extends ApiController
             'descripcion' => $descripcion ?: null,
             'activo'      => $activo,
         ], true);
+
+        RedisService::invalidateCatalog();
 
         return $this->apiResponse($model->find($id), 'Categoría creada exitosamente.', 201);
     }
@@ -83,6 +95,8 @@ class CategoriaController extends ApiController
             'activo'      => $activo,
         ]);
 
+        RedisService::invalidateCatalog();
+
         return $this->apiResponse($model->find($id), 'Categoría actualizada exitosamente.');
     }
 
@@ -101,6 +115,7 @@ class CategoriaController extends ApiController
         }
 
         $model->delete($id);
+        RedisService::invalidateCatalog();
         return $this->apiResponse(['id' => (int) $id], 'Categoría eliminada exitosamente.');
     }
 }

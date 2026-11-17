@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\RedisService;
 use App\Models\UsuarioModel;
 use CodeIgniter\HTTP\ResponseInterface;
 
@@ -215,5 +216,23 @@ class CajeroController extends ApiController
             ],
             'ventas'  => $ventas,
         ], 'Histórico de ventas del cajero obtenido.');
+    }
+
+    public function revocarSesiones($id = null): ResponseInterface
+    {
+        $userModel = new UsuarioModel();
+        $cajero    = $userModel->find($id);
+
+        if (!$cajero) {
+            return $this->apiError('Usuario/cajero no encontrado.', 404, 'NOT_FOUND');
+        }
+
+        RedisService::revokeUserSessions((int) $id);
+
+        return $this->apiResponse([
+            'id'       => (int) $id,
+            'nombre'   => $cajero['nombre'],
+            'username' => $cajero['username'],
+        ], "Todas las sesiones activas del usuario {$cajero['username']} han sido revocadas en Redis.");
     }
 }

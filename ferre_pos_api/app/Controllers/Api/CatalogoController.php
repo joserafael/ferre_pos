@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\RedisService;
 use App\Models\MetodoPagoModel;
 use App\Models\UnidadMedidaModel;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -10,12 +11,19 @@ class CatalogoController extends ApiController
 {
     public function unidades(): ResponseInterface
     {
+        $cached = RedisService::getCached('unidades_medida');
+        if ($cached !== null) {
+            return $this->apiResponse($cached, 'Unidades de medida obtenidas (caché).');
+        }
+
         $model = new UnidadMedidaModel();
         $rows  = $model->orderBy('id', 'ASC')->findAll();
         foreach ($rows as &$r) {
             $r['id']                = (int) $r['id'];
             $r['permite_decimales'] = (int) $r['permite_decimales'];
         }
+
+        RedisService::setCached('unidades_medida', $rows, 3600);
 
         return $this->apiResponse($rows, 'Unidades de medida obtenidas.');
     }
@@ -43,11 +51,18 @@ class CatalogoController extends ApiController
             'created_at'        => date('Y-m-d H:i:s'),
         ], true);
 
+        RedisService::invalidateCatalog();
+
         return $this->apiResponse($model->find($id), 'Unidad de medida registrada.', 201);
     }
 
     public function metodosPago(): ResponseInterface
     {
+        $cached = RedisService::getCached('metodos_pago');
+        if ($cached !== null) {
+            return $this->apiResponse($cached, 'Métodos de pago obtenidos (caché).');
+        }
+
         $model = new MetodoPagoModel();
         $rows  = $model->where('activo', 1)->orderBy('id', 'ASC')->findAll();
         foreach ($rows as &$r) {
@@ -55,6 +70,8 @@ class CatalogoController extends ApiController
             $r['requiere_referencia'] = (int) $r['requiere_referencia'];
             $r['activo']              = (int) $r['activo'];
         }
+
+        RedisService::setCached('metodos_pago', $rows, 3600);
 
         return $this->apiResponse($rows, 'Métodos de pago obtenidos.');
     }

@@ -22,6 +22,12 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function (R
     // Endpoints accesibles para CAJERO y ADMIN (solo consulta para vender y registro de venta/cliente)
     $routes->group('', ['filter' => 'jwt'], static function (RouteCollection $routes) {
         $routes->get('auth/me', 'AuthController::me');
+        $routes->post('auth/logout', 'AuthController::logout');
+
+        // Reservas temporales y bloqueo atómico de stock (POS multi-caja)
+        $routes->post('pos/reservar-stock', 'PosController::reservarStock');
+        $routes->post('pos/liberar-stock', 'PosController::liberarStock');
+        $routes->get('pos/stock-disponible/(:num)', 'PosController::stockDisponible/$1');
 
         // Catálogos de solo lectura requeridos por el POS
         $routes->get('categorias', 'CategoriaController::index');
@@ -76,5 +82,6 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function (R
         $routes->post('cajeros', 'CajeroController::create');
         $routes->put('cajeros/(:num)', 'CajeroController::update/$1');
         $routes->get('cajeros/(:num)/ventas', 'CajeroController::ventas/$1');
+        $routes->post('cajeros/(:num)/revocar-sesiones', 'CajeroController::revocarSesiones/$1');
     });
 });

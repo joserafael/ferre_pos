@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\RedisService;
 use App\Models\ClienteModel;
 use App\Models\MetodoPagoModel;
 use App\Models\MovimientoInventarioModel;
@@ -139,6 +140,7 @@ class VentaController extends ApiController
         $descuentoUsd     = max(0.00, round((float) ($payload['descuento_usd'] ?? 0.00), 2));
         $vueltoUsd        = max(0.00, round((float) ($payload['vuelto_usd'] ?? 0.00), 2));
         $vueltoVes        = max(0.00, round((float) ($payload['vuelto_ves'] ?? 0.00), 2));
+        $carritoId        = trim((string) ($payload['carrito_id'] ?? $payload['reserva_id'] ?? ''));
         $items            = $payload['items'] ?? [];
         $pagos            = $payload['pagos'] ?? [];
 
@@ -159,6 +161,31 @@ class VentaController extends ApiController
             return $this->apiError('No existe una tasa de cambio activa para facturar.', 422, 'NO_ACTIVE_RATE');
         }
 
+        // Adquirir cerrojos atómicos distribuidos (Mutex) en Redis para cada producto a vender
+        $acquiredLocks = [];
+        $releaseAllLocks = static function () use (&$acquiredLocks) {
+            foreach ($acquiredLocks as $res => $tok) {
+                RedisService::releaseLock($res, $tok);
+            }
+            $acquiredLocks = [];
+        };
+
+        foreach ($items as $it) {
+            $pId = (int) ($it['producto_id'] ?? 0);
+            if ($pId > 0 && !isset($acquiredLocks["prod:{$pId}"])) {
+                $token = RedisService::acquireLock("prod:{$pId}", 10);
+                if (!$token) {
+                    $releaseAllLocks();
+                    return $this->apiError(
+                        "El producto ID {$pId} se encuentra bloqueado por otra transacción simultánea en POS. Reintente en unos segundos.",
+                        409,
+                        'CONCURRENT_LOCK_CONFLICT'
+                    );
+                }
+                $acquiredLocks["prod:{$pId}"] = $token;
+            }
+        }
+
         $tasaId       = (int) $tasaActiva['id'];
         $tasaAplicada = round((float) $tasaActiva['tasa_ves'], 4);
 
@@ -175,16 +202,19 @@ class VentaController extends ApiController
             $cantidad   = isset($item['cantidad']) ? round((float) $item['cantidad'], 3) : 0.000;
 
             if ($productoId <= 0 || $cantidad <= 0) {
+                $releaseAllLocks();
                 return $this->apiError("Ítem #" . ($idx + 1) . ": producto y cantidad deben ser válidos y mayores a cero.", 422, 'VALIDATION_ERROR');
             }
 
             $prod = $productoModel->find($productoId);
             if (!$prod || (int) $prod['activo'] !== 1) {
+                $releaseAllLocks();
                 return $this->apiError("El producto ID {$productoId} no existe o está inactivo.", 404, 'PRODUCT_NOT_FOUND');
             }
 
             $unidadVenta = $unidadModel->find((int) $prod['unidad_venta_id']);
             if ($unidadVenta && (int) $unidadVenta['permite_decimales'] === 0 && fmod($cantidad, 1.0) !== 0.0) {
+                $releaseAllLocks();
                 return $this->apiError(
                     "El producto '{$prod['nombre']}' se vende por {$unidadVenta['nombre']} ({$unidadVenta['codigo']}) y no permite cantidades fraccionadas/decimales.",
                     422,
@@ -192,10 +222,14 @@ class VentaController extends ApiController
                 );
             }
 
-            $stockActual = (float) $prod['stock_actual'];
-            if ($cantidad > $stockActual) {
+            $stockActual         = (float) $prod['stock_actual'];
+            $stockReservadoOtros = RedisService::getReservedStockExcludingCart($productoId, $carritoId);
+            $stockDisponible     = max(0.000, round($stockActual - $stockReservadoOtros, 3));
+
+            if ($cantidad > $stockDisponible) {
+                $releaseAllLocks();
                 return $this->apiError(
-                    "Stock insuficiente para '{$prod['nombre']}'. Disponible: {$stockActual}, Solicitado: {$cantidad}.",
+                    "Stock insuficiente para '{$prod['nombre']}'. Disponible en tienda: {$stockDisponible} (Stock físico: {$stockActual}, Reservado en otras cajas: {$stockReservadoOtros}), Solicitado: {$cantidad}.",
                     422,
                     'INSUFFICIENT_STOCK'
                 );
@@ -242,15 +276,18 @@ class VentaController extends ApiController
             $referencia    = trim((string) ($pago['referencia_transaccion'] ?? ''));
 
             if ($metodoId <= 0 || $montoOriginal <= 0) {
+                $releaseAllLocks();
                 return $this->apiError("Pago #" . ($idx + 1) . ": método de pago y monto mayor a cero son obligatorios.", 422, 'INVALID_PAYMENT');
             }
 
             $metodo = $metodoModel->find($metodoId);
             if (!$metodo || (int) $metodo['activo'] !== 1) {
+                $releaseAllLocks();
                 return $this->apiError("El método de pago ID {$metodoId} no es válido.", 422, 'INVALID_PAYMENT_METHOD');
             }
 
             if ((int) $metodo['requiere_referencia'] === 1 && $referencia === '') {
+                $releaseAllLocks();
                 return $this->apiError(
                     "El método de pago '{$metodo['nombre']}' ({$metodo['codigo']}) requiere obligatoriamente número de referencia o lote.",
                     422,
@@ -276,6 +313,7 @@ class VentaController extends ApiController
         }
 
         if (round($totalPagadoEquivUsd, 2) + 0.02 < $totalUsd) {
+            $releaseAllLocks();
             $faltanteUsd = round($totalUsd - $totalPagadoEquivUsd, 2);
             return $this->apiError(
                 "El monto pagado ($" . number_format($totalPagadoEquivUsd, 2) . " USD equiv.) es menor al total de la factura ($" . number_format($totalUsd, 2) . " USD). Faltan $" . number_format($faltanteUsd, 2) . " USD.",
@@ -387,8 +425,20 @@ class VentaController extends ApiController
         $db->transComplete();
 
         if ($db->transStatus() === false) {
+            $releaseAllLocks();
             return $this->apiError('Error crítico de base de datos al procesar la venta.', 500, 'DB_TRANSACTION_ERROR');
         }
+
+        // 1. Confirmar/liberar reserva de carrito en Redis
+        if ($carritoId !== '') {
+            RedisService::confirmCartStock($carritoId);
+        }
+
+        // 2. Liberar cerrojos atómicos
+        $releaseAllLocks();
+
+        // 3. Invalidar catálogo de productos en Redis para reflejar el nuevo stock inmediatamente
+        RedisService::invalidateProducts();
 
         return $this->show($ventaId)->setStatusCode(201);
     }
@@ -467,6 +517,8 @@ class VentaController extends ApiController
         if ($db->transStatus() === false) {
             return $this->apiError('Error al anular la factura y revertir el inventario.', 500, 'DB_TRANSACTION_ERROR');
         }
+
+        RedisService::invalidateProducts();
 
         return $this->show($id);
     }
