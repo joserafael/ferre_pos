@@ -15,16 +15,53 @@ class InventarioController extends ApiController
 {
     public function entradas(): ResponseInterface
     {
-        $db   = \Config\Database::connect();
-        $rows = $db->table('entradas_inventario e')
-            ->select('e.*, u.nombre as usuario_nombre, COUNT(d.id) as total_items')
-            ->join('usuarios u', 'u.id = e.usuario_id', 'left')
-            ->join('entrada_detalles d', 'd.entrada_id = e.id', 'left')
-            ->groupBy('e.id')
-            ->orderBy('e.id', 'DESC')
-            ->limit(100)
-            ->get()
-            ->getResultArray();
+        $db     = \Config\Database::connect();
+        $search = trim((string) ($this->request->getGet('q') ?? ''));
+
+        $crearBuilder = static function () use ($db, $search) {
+            $b = $db->table('entradas_inventario e')
+                ->select('e.*, u.nombre as usuario_nombre, COUNT(d.id) as total_items')
+                ->join('usuarios u', 'u.id = e.usuario_id', 'left')
+                ->join('entrada_detalles d', 'd.entrada_id = e.id', 'left');
+
+            if ($search !== '') {
+                $b->groupStart()
+                    ->like('e.numero_documento', $search)
+                    ->orLike('e.proveedor_nombre', $search)
+                    ->groupEnd();
+            }
+
+            return $b;
+        };
+
+        $paginar = $this->wantsPagination();
+        if ($paginar) {
+            [$page, $perPage] = $this->getPaginationParams(25);
+            $countBuilder     = $db->table('entradas_inventario e');
+            if ($search !== '') {
+                $countBuilder->groupStart()
+                    ->like('e.numero_documento', $search)
+                    ->orLike('e.proveedor_nombre', $search)
+                    ->groupEnd();
+            }
+            $total  = (int) $countBuilder->countAllResults();
+            $meta   = $this->buildPaginationMeta($total, $page, $perPage);
+            $offset = ($meta['current_page'] - 1) * $perPage;
+
+            $rows = $crearBuilder()
+                ->groupBy('e.id')
+                ->orderBy('e.id', 'DESC')
+                ->limit($perPage, $offset)
+                ->get()
+                ->getResultArray();
+        } else {
+            $rows = $crearBuilder()
+                ->groupBy('e.id')
+                ->orderBy('e.id', 'DESC')
+                ->limit(100)
+                ->get()
+                ->getResultArray();
+        }
 
         foreach ($rows as &$r) {
             $r['id']            = (int) $r['id'];
@@ -32,6 +69,13 @@ class InventarioController extends ApiController
             $r['total_usd']     = (float) $r['total_usd'];
             $r['total_ves']     = (float) $r['total_ves'];
             $r['total_items']   = (int) $r['total_items'];
+        }
+
+        if ($paginar) {
+            return $this->apiResponse([
+                'items'      => $rows,
+                'pagination' => $meta,
+            ], 'Entradas de inventario paginadas obtenidas.');
         }
 
         return $this->apiResponse($rows, 'Entradas de inventario obtenidas.');
@@ -311,25 +355,55 @@ class InventarioController extends ApiController
     {
         $productoId     = $this->request->getGet('producto_id') ? (int) $this->request->getGet('producto_id') : null;
         $tipoMovimiento = $this->request->getGet('tipo_movimiento');
+        $search         = trim((string) ($this->request->getGet('q') ?? ''));
         $limit          = min(250, max(10, (int) ($this->request->getGet('limit') ?: 100)));
+        $db             = \Config\Database::connect();
 
-        $builder = \Config\Database::connect()->table('movimientos_inventario m')
-            ->select('m.*, p.sku, p.nombre as producto_nombre, uv.codigo as unidad_venta_codigo, u.nombre as usuario_nombre')
-            ->join('productos p', 'p.id = m.producto_id', 'left')
-            ->join('unidades_medida uv', 'uv.id = p.unidad_venta_id', 'left')
-            ->join('usuarios u', 'u.id = m.usuario_id', 'left')
-            ->orderBy('m.id', 'DESC')
-            ->limit($limit);
+        $crearBuilder = static function () use ($db, $productoId, $tipoMovimiento, $search) {
+            $b = $db->table('movimientos_inventario m')
+                ->select('m.*, p.sku, p.nombre as producto_nombre, uv.codigo as unidad_venta_codigo, u.nombre as usuario_nombre')
+                ->join('productos p', 'p.id = m.producto_id', 'left')
+                ->join('unidades_medida uv', 'uv.id = p.unidad_venta_id', 'left')
+                ->join('usuarios u', 'u.id = m.usuario_id', 'left');
 
-        if ($productoId) {
-            $builder->where('m.producto_id', $productoId);
+            if ($productoId) {
+                $b->where('m.producto_id', $productoId);
+            }
+
+            if (!empty($tipoMovimiento)) {
+                $b->where('m.tipo_movimiento', $tipoMovimiento);
+            }
+
+            if ($search !== '') {
+                $b->groupStart()
+                    ->like('p.nombre', $search)
+                    ->orLike('p.sku', $search)
+                    ->orLike('m.observacion', $search)
+                    ->groupEnd();
+            }
+
+            return $b;
+        };
+
+        $paginar = $this->wantsPagination();
+        if ($paginar) {
+            [$page, $perPage] = $this->getPaginationParams(25);
+            $total            = (int) $crearBuilder()->countAllResults();
+            $meta             = $this->buildPaginationMeta($total, $page, $perPage);
+            $offset           = ($meta['current_page'] - 1) * $perPage;
+            $rows             = $crearBuilder()
+                ->orderBy('m.id', 'DESC')
+                ->limit($perPage, $offset)
+                ->get()
+                ->getResultArray();
+        } else {
+            $rows = $crearBuilder()
+                ->orderBy('m.id', 'DESC')
+                ->limit($limit)
+                ->get()
+                ->getResultArray();
         }
 
-        if (!empty($tipoMovimiento)) {
-            $builder->where('m.tipo_movimiento', $tipoMovimiento);
-        }
-
-        $rows = $builder->get()->getResultArray();
         foreach ($rows as &$r) {
             $r['id']                 = (int) $r['id'];
             $r['producto_id']        = (int) $r['producto_id'];
@@ -339,6 +413,13 @@ class InventarioController extends ApiController
             $r['costo_unitario_usd'] = (float) $r['costo_unitario_usd'];
             $r['costo_unitario_ves'] = (float) $r['costo_unitario_ves'];
             $r['tasa_aplicada']      = (float) $r['tasa_aplicada'];
+        }
+
+        if ($paginar) {
+            return $this->apiResponse([
+                'items'      => $rows,
+                'pagination' => $meta,
+            ], 'Movimientos del Kardex paginados obtenidos.');
         }
 
         return $this->apiResponse($rows, 'Movimientos del Kardex obtenidos.');

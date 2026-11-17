@@ -11,33 +11,50 @@ class CategoriaController extends ApiController
     public function index(): ResponseInterface
     {
         $soloActivas = (bool) $this->request->getGet('activas');
+        $search      = trim((string) ($this->request->getGet('q') ?? ''));
         $cacheKey    = 'categorias:' . ($soloActivas ? 'activas' : 'todas');
+        $fromCache   = false;
 
-        $cached = RedisService::getCached($cacheKey);
-        if ($cached !== null) {
-            return $this->apiResponse($cached, 'Categorías obtenidas (caché).');
+        $rows = RedisService::getCached($cacheKey);
+        if ($rows !== null) {
+            $fromCache = true;
+        } else {
+            $builder = \Config\Database::connect()->table('categorias c')
+                ->select('c.*, COUNT(p.id) as total_productos')
+                ->join('productos p', 'p.categoria_id = c.id', 'left')
+                ->groupBy('c.id')
+                ->orderBy('c.nombre', 'ASC');
+
+            if ($soloActivas) {
+                $builder->where('c.activo', 1);
+            }
+
+            $rows = $builder->get()->getResultArray();
+            foreach ($rows as &$r) {
+                $r['id']              = (int) $r['id'];
+                $r['activo']          = (int) $r['activo'];
+                $r['total_productos'] = (int) $r['total_productos'];
+            }
+
+            RedisService::setCached($cacheKey, $rows, 1800);
         }
 
-        $builder = \Config\Database::connect()->table('categorias c')
-            ->select('c.*, COUNT(p.id) as total_productos')
-            ->join('productos p', 'p.categoria_id = c.id', 'left')
-            ->groupBy('c.id')
-            ->orderBy('c.nombre', 'ASC');
-
-        if ($soloActivas) {
-            $builder->where('c.activo', 1);
+        if ($search !== '') {
+            $qLower = mb_strtolower($search);
+            $rows   = array_values(array_filter($rows, static function (array $r) use ($qLower) {
+                return str_contains(mb_strtolower((string) $r['nombre']), $qLower)
+                    || str_contains(mb_strtolower((string) ($r['descripcion'] ?? '')), $qLower);
+            }));
         }
 
-        $rows = $builder->get()->getResultArray();
-        foreach ($rows as &$r) {
-            $r['id']              = (int) $r['id'];
-            $r['activo']          = (int) $r['activo'];
-            $r['total_productos'] = (int) $r['total_productos'];
+        $msg = $fromCache ? 'Categorías obtenidas (caché).' : 'Categorías obtenidas.';
+
+        if ($this->wantsPagination()) {
+            [$page, $perPage] = $this->getPaginationParams(25);
+            return $this->apiResponse($this->paginateArray($rows, $page, $perPage), $msg);
         }
 
-        RedisService::setCached($cacheKey, $rows, 1800);
-
-        return $this->apiResponse($rows, 'Categorías obtenidas.');
+        return $this->apiResponse($rows, $msg);
     }
 
     public function create(): ResponseInterface

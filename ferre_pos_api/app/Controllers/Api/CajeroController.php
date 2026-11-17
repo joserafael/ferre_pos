@@ -43,6 +43,24 @@ class CajeroController extends ApiController
             $r['total_vendido_ves']  = (float) $r['total_vendido_ves'];
         }
 
+        $search = trim((string) ($this->request->getGet('q') ?? ''));
+        if ($search !== '') {
+            $qLower = mb_strtolower($search);
+            $rows   = array_values(array_filter($rows, static function (array $r) use ($qLower) {
+                return str_contains(mb_strtolower((string) $r['nombre']), $qLower)
+                    || str_contains(mb_strtolower((string) $r['username']), $qLower)
+                    || str_contains(mb_strtolower((string) ($r['email'] ?? '')), $qLower);
+            }));
+        }
+
+        if ($this->wantsPagination()) {
+            [$page, $perPage] = $this->getPaginationParams(25);
+            return $this->apiResponse(
+                $this->paginateArray($rows, $page, $perPage),
+                'Listado paginado de cajeros obtenido.'
+            );
+        }
+
         return $this->apiResponse($rows, 'Listado de cajeros y resumen de ventas obtenido.');
     }
 

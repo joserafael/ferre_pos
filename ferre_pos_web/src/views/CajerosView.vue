@@ -2,12 +2,18 @@
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
+import PaginationBar from '@/components/PaginationBar.vue'
 
 const tasaStore = useTasaStore()
 const cajeros = ref([])
+const busqueda = ref('')
+const paginaActual = ref(1)
+const porPagina = ref(10)
+const paginacion = ref({ total: 0, per_page: 10, current_page: 1, last_page: 1, from: 0, to: 0 })
 const cargando = ref(false)
 const errorMsg = ref('')
 const exitoMsg = ref('')
+let debounceTimer = null
 
 // Modal Crear / Editar Cajero
 const modalForm = ref(false)
@@ -29,13 +35,32 @@ const historicoData = ref(null)
 async function cargarCajeros() {
   cargando.value = true
   try {
-    const res = await api.get('/cajeros')
-    cajeros.value = res.data || []
+    const params = new URLSearchParams({
+      page: String(paginaActual.value),
+      per_page: String(porPagina.value)
+    })
+    if (busqueda.value.trim()) params.set('q', busqueda.value.trim())
+
+    const res = await api.get(`/cajeros?${params.toString()}`)
+    const data = res.data || {}
+    cajeros.value = data.items || []
+    if (data.pagination) {
+      paginacion.value = data.pagination
+      paginaActual.value = data.pagination.current_page
+    }
   } catch (e) {
     errorMsg.value = e.message
   } finally {
     cargando.value = false
   }
+}
+
+function alEscribirBusqueda() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    paginaActual.value = 1
+    cargarCajeros()
+  }, 180)
 }
 
 onMounted(cargarCajeros)
@@ -137,6 +162,16 @@ async function verHistoricoVentas(cajero) {
     </div>
 
     <div class="card">
+      <div style="margin-bottom: 0.9rem">
+        <input
+          v-model="busqueda"
+          type="text"
+          class="form-control"
+          placeholder="🔍 Buscar cajero por nombre, usuario o email..."
+          @input="alEscribirBusqueda"
+        />
+      </div>
+
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -194,6 +229,14 @@ async function verHistoricoVentas(cajero) {
           </tbody>
         </table>
       </div>
+
+      <PaginationBar
+        :pagination="paginacion"
+        :loading="cargando"
+        label="cajeros"
+        @page-change="(p) => { paginaActual = p; cargarCajeros() }"
+        @per-page-change="(pp) => { porPagina = pp; paginaActual = 1; cargarCajeros() }"
+      />
     </div>
 
     <!-- Modal Crear / Editar Cajero -->

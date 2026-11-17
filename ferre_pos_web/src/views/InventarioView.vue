@@ -2,16 +2,31 @@
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
+import PaginationBar from '@/components/PaginationBar.vue'
+import ProductAutocomplete from '@/components/ProductAutocomplete.vue'
 
 const tasaStore = useTasaStore()
 const tabActiva = ref('kardex')
 const kardex = ref([])
 const entradas = ref([])
-const productos = ref([])
 const filtroTipo = ref('')
 const filtroProductoId = ref('')
+const busquedaKardex = ref('')
+const paginaKardex = ref(1)
+const porPaginaKardex = ref(25)
+const paginacionKardex = ref({ total: 0, per_page: 25, current_page: 1, last_page: 1, from: 0, to: 0 })
+const cargandoKardex = ref(false)
+
+const busquedaEntradas = ref('')
+const paginaEntradas = ref(1)
+const porPaginaEntradas = ref(25)
+const paginacionEntradas = ref({ total: 0, per_page: 25, current_page: 1, last_page: 1, from: 0, to: 0 })
+const cargandoEntradas = ref(false)
+
 const alertaMsg = ref('')
 const errorMsg = ref('')
+let timerKardex = null
+let timerEntradas = null
 
 // Modal Nueva Entrada de Compra (USD o VES)
 const modalEntrada = ref(false)
@@ -32,26 +47,77 @@ const ajusteForm = ref({
   observacion: ''
 })
 
-async function cargarTodo() {
-  const paramsKardex = new URLSearchParams()
-  if (filtroProductoId.value) paramsKardex.set('producto_id', filtroProductoId.value)
-  if (filtroTipo.value) paramsKardex.set('tipo_movimiento', filtroTipo.value)
+async function cargarKardex() {
+  cargandoKardex.value = true
+  try {
+    const params = new URLSearchParams({
+      page: String(paginaKardex.value),
+      per_page: String(porPaginaKardex.value)
+    })
+    if (filtroProductoId.value) params.set('producto_id', String(filtroProductoId.value))
+    if (filtroTipo.value) params.set('tipo_movimiento', filtroTipo.value)
+    if (busquedaKardex.value.trim()) params.set('q', busquedaKardex.value.trim())
 
-  const [resK, resE, resP] = await Promise.all([
-    api.get(`/inventario/kardex?${paramsKardex.toString()}`),
-    api.get('/inventario/entradas'),
-    api.get('/productos')
-  ])
-  kardex.value = resK.data || []
-  entradas.value = resE.data || []
-  productos.value = resP.data || []
+    const res = await api.get(`/inventario/kardex?${params.toString()}`)
+    const data = res.data || {}
+    kardex.value = data.items || []
+    if (data.pagination) {
+      paginacionKardex.value = data.pagination
+      paginaKardex.value = data.pagination.current_page
+    }
+  } finally {
+    cargandoKardex.value = false
+  }
+}
+
+async function cargarEntradas() {
+  cargandoEntradas.value = true
+  try {
+    const params = new URLSearchParams({
+      page: String(paginaEntradas.value),
+      per_page: String(porPaginaEntradas.value)
+    })
+    if (busquedaEntradas.value.trim()) params.set('q', busquedaEntradas.value.trim())
+
+    const res = await api.get(`/inventario/entradas?${params.toString()}`)
+    const data = res.data || {}
+    entradas.value = data.items || []
+    if (data.pagination) {
+      paginacionEntradas.value = data.pagination
+      paginaEntradas.value = data.pagination.current_page
+    }
+  } finally {
+    cargandoEntradas.value = false
+  }
+}
+
+async function cargarTodo() {
+  await Promise.all([cargarKardex(), cargarEntradas()])
+}
+
+function filtrarKardex() {
+  paginaKardex.value = 1
+  cargarKardex()
+}
+
+function alEscribirBusquedaKardex() {
+  clearTimeout(timerKardex)
+  timerKardex = setTimeout(filtrarKardex, 180)
+}
+
+function alEscribirBusquedaEntradas() {
+  clearTimeout(timerEntradas)
+  timerEntradas = setTimeout(() => {
+    paginaEntradas.value = 1
+    cargarEntradas()
+  }, 180)
 }
 
 onMounted(cargarTodo)
 
 function agregarFilaCompra() {
   entradaForm.value.items.push({
-    producto_id: productos.value[0]?.id || '',
+    producto_id: '',
     cantidad_comprada: 1,
     costo_unitario: 1,
     precio_venta_usd: ''
@@ -110,22 +176,31 @@ async function registrarAjusteKardex() {
     <!-- Pestañas -->
     <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem">
       <button :class="['btn', tabActiva === 'kardex' ? 'btn-dark' : 'btn-outline']" @click="tabActiva = 'kardex'">
-        📜 Movimientos del Kardex ({{ kardex.length }})
+        📜 Movimientos del Kardex ({{ paginacionKardex.total }})
       </button>
       <button :class="['btn', tabActiva === 'entradas' ? 'btn-dark' : 'btn-outline']" @click="tabActiva = 'entradas'">
-        🚚 Facturas de Compra / Entradas ({{ entradas.length }})
+        🚚 Facturas de Compra / Entradas ({{ paginacionEntradas.total }})
       </button>
     </div>
 
     <!-- Vista Kardex Inmutable -->
     <div v-if="tabActiva === 'kardex'" class="card">
-      <div class="grid-3" style="margin-bottom: 1rem">
-        <select v-model="filtroProductoId" class="form-control" @change="cargarTodo">
-          <option value="">Todos los productos</option>
-          <option v-for="p in productos" :key="p.id" :value="p.id">{{ p.sku }} - {{ p.nombre }}</option>
-        </select>
+      <div class="grid-4" style="margin-bottom: 1rem; align-items: center">
+        <input
+          v-model="busquedaKardex"
+          type="text"
+          class="form-control"
+          placeholder="🔍 Buscar por SKU, producto u observación..."
+          @input="alEscribirBusquedaKardex"
+        />
 
-        <select v-model="filtroTipo" class="form-control" @change="cargarTodo">
+        <ProductAutocomplete
+          v-model="filtroProductoId"
+          placeholder="Filtrar por producto..."
+          @update:model-value="filtrarKardex"
+        />
+
+        <select v-model="filtroTipo" class="form-control" @change="filtrarKardex">
           <option value="">Todos los tipos de movimiento</option>
           <option value="ENTRADA_COMPRA">ENTRADA_COMPRA</option>
           <option value="SALIDA_VENTA">SALIDA_VENTA</option>
@@ -134,7 +209,7 @@ async function registrarAjusteKardex() {
           <option value="AJUSTE_NEGATIVO">AJUSTE_NEGATIVO</option>
         </select>
 
-        <button class="btn btn-outline" @click="cargarTodo">↻ Refrescar Kardex</button>
+        <button class="btn btn-outline" @click="cargarKardex" :disabled="cargandoKardex">↻ Refrescar Kardex</button>
       </div>
 
       <div class="table-wrap">
@@ -186,10 +261,29 @@ async function registrarAjusteKardex() {
           </tbody>
         </table>
       </div>
+
+      <PaginationBar
+        :pagination="paginacionKardex"
+        :loading="cargandoKardex"
+        label="movimientos"
+        @page-change="(p) => { paginaKardex = p; cargarKardex() }"
+        @per-page-change="(pp) => { porPaginaKardex = pp; paginaKardex = 1; cargarKardex() }"
+      />
     </div>
 
     <!-- Vista Entradas de Compra -->
     <div v-else class="card">
+      <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem">
+        <input
+          v-model="busquedaEntradas"
+          type="text"
+          class="form-control"
+          placeholder="🔍 Buscar por Nro. Documento o Proveedor..."
+          @input="alEscribirBusquedaEntradas"
+        />
+        <button class="btn btn-outline" @click="cargarEntradas" :disabled="cargandoEntradas">↻ Refrescar</button>
+      </div>
+
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -227,6 +321,14 @@ async function registrarAjusteKardex() {
           </tbody>
         </table>
       </div>
+
+      <PaginationBar
+        :pagination="paginacionEntradas"
+        :loading="cargandoEntradas"
+        label="entradas"
+        @page-change="(p) => { paginaEntradas = p; cargarEntradas() }"
+        @per-page-change="(pp) => { porPaginaEntradas = pp; paginaEntradas = 1; cargarEntradas() }"
+      />
     </div>
 
     <!-- Modal Registrar Compra -->
@@ -260,11 +362,11 @@ async function registrarAjusteKardex() {
           <div v-for="(item, idx) in entradaForm.items" :key="idx" class="grid-4" style="margin-bottom: 0.5rem; align-items: end">
             <div>
               <label class="form-label">Producto</label>
-              <select v-model="item.producto_id" class="form-control" required>
-                <option v-for="p in productos" :key="p.id" :value="p.id">
-                  {{ p.sku }} - {{ p.nombre }} (Compra en {{ p.unidad_compra_codigo }} x {{ p.factor_conversion }})
-                </option>
-              </select>
+              <ProductAutocomplete
+                v-model="item.producto_id"
+                placeholder="🔍 Escribe SKU o nombre..."
+                :required="true"
+              />
             </div>
             <div>
               <label class="form-label">Cant. Comprada</label>
@@ -303,11 +405,11 @@ async function registrarAjusteKardex() {
         <form @submit.prevent="registrarAjusteKardex">
           <div class="form-group">
             <label class="form-label">Producto *</label>
-            <select v-model="ajusteForm.producto_id" class="form-control" required>
-              <option v-for="p in productos" :key="p.id" :value="p.id">
-                {{ p.sku }} - {{ p.nombre }} (Actual: {{ p.stock_actual }} {{ p.unidad_venta_codigo }})
-              </option>
-            </select>
+            <ProductAutocomplete
+              v-model="ajusteForm.producto_id"
+              placeholder="🔍 Escribe SKU, barra o nombre del producto..."
+              :required="true"
+            />
           </div>
 
           <div class="grid-2">

@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
+import PaginationBar from '@/components/PaginationBar.vue'
 
 const tasaStore = useTasaStore()
 const productos = ref([])
@@ -24,6 +25,7 @@ const modalAbierto = ref(false)
 const editandoId = ref(null)
 const errorForm = ref('')
 const guardando = ref(false)
+let debounceTimer = null
 
 const form = ref({
   sku: '',
@@ -41,23 +43,17 @@ const form = ref({
   stock_minimo: 5.0
 })
 
-const paginasVisibles = computed(() => {
-  const total = paginacion.value.last_page
-  const actual = paginacion.value.current_page
-  if (total <= 7) {
-    return Array.from({ length: total }, (_, i) => i + 1)
-  }
-  const paginas = [1]
-  if (actual > 3) paginas.push('...')
-  const inicio = Math.max(2, actual - 1)
-  const fin = Math.min(total - 1, actual + 1)
-  for (let i = inicio; i <= fin; i++) {
-    paginas.push(i)
-  }
-  if (actual < total - 2) paginas.push('...')
-  paginas.push(total)
-  return paginas
-})
+function alEscribirBusqueda() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    buscarProductos()
+  }, 180)
+}
+
+function alCambiarPorPagina(nuevoPorPagina) {
+  porPagina.value = nuevoPorPagina
+  buscarProductos()
+}
 
 async function cargarCatalogosBase() {
   try {
@@ -195,7 +191,8 @@ async function guardarProducto() {
           type="text"
           class="form-control"
           style="flex: 2; min-width: 220px"
-          placeholder="Filtrar por SKU, código de barras o nombre..."
+          placeholder="🔍 Escribe SKU, código de barras o nombre..."
+          @input="alEscribirBusqueda"
           @keyup.enter="buscarProductos"
         />
         <select
@@ -208,16 +205,6 @@ async function guardarProducto() {
           <option v-for="c in categorias" :key="c.id" :value="c.id">
             {{ c.nombre }} ({{ c.total_productos }})
           </option>
-        </select>
-        <select
-          v-model.number="porPagina"
-          class="form-control"
-          style="width: 130px"
-          @change="buscarProductos"
-        >
-          <option :value="25">25 / pág.</option>
-          <option :value="50">50 / pág.</option>
-          <option :value="100">100 / pág.</option>
         </select>
         <button class="btn btn-dark" @click="buscarProductos" :disabled="loading">
           {{ loading ? 'Cargando...' : 'Buscar' }}
@@ -288,76 +275,13 @@ async function guardarProducto() {
         </table>
       </div>
 
-      <!-- Barra de Paginación -->
-      <div
-        v-if="paginacion.total > 0"
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 0.75rem;
-          margin-top: 1rem;
-          padding-top: 0.9rem;
-          border-top: 1px solid var(--border-color, #e5e7eb);
-        "
-      >
-        <div style="font-size: 0.85rem; color: var(--text-muted)">
-          Mostrando <strong>{{ paginacion.from }}</strong>–<strong>{{ paginacion.to }}</strong> de
-          <strong>{{ paginacion.total }}</strong> productos
-        </div>
-
-        <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center">
-          <button
-            class="btn btn-outline btn-sm"
-            :disabled="paginacion.current_page <= 1 || loading"
-            @click="cambiarPagina(1)"
-            title="Primera página"
-          >
-            «
-          </button>
-          <button
-            class="btn btn-outline btn-sm"
-            :disabled="paginacion.current_page <= 1 || loading"
-            @click="cambiarPagina(paginacion.current_page - 1)"
-          >
-            ‹ Anterior
-          </button>
-
-          <template v-for="(pag, idx) in paginasVisibles" :key="idx">
-            <span
-              v-if="pag === '...'"
-              style="padding: 0 0.35rem; color: var(--text-muted); font-size: 0.85rem"
-            >
-              ...
-            </span>
-            <button
-              v-else
-              :class="['btn btn-sm', pag === paginacion.current_page ? 'btn-primary' : 'btn-outline']"
-              :disabled="loading"
-              @click="cambiarPagina(pag)"
-            >
-              {{ pag }}
-            </button>
-          </template>
-
-          <button
-            class="btn btn-outline btn-sm"
-            :disabled="paginacion.current_page >= paginacion.last_page || loading"
-            @click="cambiarPagina(paginacion.current_page + 1)"
-          >
-            Siguiente ›
-          </button>
-          <button
-            class="btn btn-outline btn-sm"
-            :disabled="paginacion.current_page >= paginacion.last_page || loading"
-            @click="cambiarPagina(paginacion.last_page)"
-            title="Última página"
-          >
-            »
-          </button>
-        </div>
-      </div>
+      <PaginationBar
+        :pagination="paginacion"
+        :loading="loading"
+        label="productos"
+        @page-change="cambiarPagina"
+        @per-page-change="alCambiarPorPagina"
+      />
     </div>
 
     <!-- Modal Crear/Editar Producto -->

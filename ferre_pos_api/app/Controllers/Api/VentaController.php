@@ -23,33 +23,51 @@ class VentaController extends ApiController
         $usuarioId = $this->request->getGet('usuario_id');
         $auth      = $this->getAuthUser();
 
-        $db      = \Config\Database::connect();
-        $builder = $db->table('ventas v')
-            ->select('v.*, u.nombre as usuario_nombre')
-            ->join('usuarios u', 'u.id = v.usuario_id', 'left')
-            ->orderBy('v.id', 'DESC')
-            ->limit(100);
+        $db = \Config\Database::connect();
+        $crearBuilder = static function () use ($db, $auth, $usuarioId, $estado, $q) {
+            $b = $db->table('ventas v')
+                ->select('v.*, u.nombre as usuario_nombre')
+                ->join('usuarios u', 'u.id = v.usuario_id', 'left');
 
-        // Si el usuario es CAJERO, solo puede ver las ventas realizadas por él mismo
-        if (strtoupper((string) ($auth['rol'] ?? '')) === 'CAJERO') {
-            $builder->where('v.usuario_id', (int) ($auth['uid'] ?? 0));
-        } elseif (!empty($usuarioId)) {
-            $builder->where('v.usuario_id', (int) $usuarioId);
+            if (strtoupper((string) ($auth['rol'] ?? '')) === 'CAJERO') {
+                $b->where('v.usuario_id', (int) ($auth['uid'] ?? 0));
+            } elseif (!empty($usuarioId)) {
+                $b->where('v.usuario_id', (int) $usuarioId);
+            }
+
+            if (!empty($estado)) {
+                $b->where('v.estado', strtoupper($estado));
+            }
+
+            if (!empty($q)) {
+                $b->groupStart()
+                    ->like('v.numero_factura', $q)
+                    ->orLike('v.cliente_documento', $q)
+                    ->orLike('v.cliente_nombre', $q)
+                    ->groupEnd();
+            }
+
+            return $b;
+        };
+
+        $paginar = $this->wantsPagination();
+        if ($paginar) {
+            [$page, $perPage] = $this->getPaginationParams(25);
+            $total            = (int) $crearBuilder()->countAllResults();
+            $meta             = $this->buildPaginationMeta($total, $page, $perPage);
+            $offset           = ($meta['current_page'] - 1) * $perPage;
+            $ventas           = $crearBuilder()
+                ->orderBy('v.id', 'DESC')
+                ->limit($perPage, $offset)
+                ->get()
+                ->getResultArray();
+        } else {
+            $ventas = $crearBuilder()
+                ->orderBy('v.id', 'DESC')
+                ->limit(100)
+                ->get()
+                ->getResultArray();
         }
-
-        if (!empty($estado)) {
-            $builder->where('v.estado', strtoupper($estado));
-        }
-
-        if (!empty($q)) {
-            $builder->groupStart()
-                ->like('v.numero_factura', $q)
-                ->orLike('v.cliente_documento', $q)
-                ->orLike('v.cliente_nombre', $q)
-                ->groupEnd();
-        }
-
-        $ventas = $builder->get()->getResultArray();
 
         foreach ($ventas as &$v) {
             $v['id']            = (int) $v['id'];
@@ -64,6 +82,13 @@ class VentaController extends ApiController
             $v['total_ves']     = (float) $v['total_ves'];
             $v['vuelto_usd']    = (float) $v['vuelto_usd'];
             $v['vuelto_ves']    = (float) $v['vuelto_ves'];
+        }
+
+        if ($paginar) {
+            return $this->apiResponse([
+                'items'      => $ventas,
+                'pagination' => $meta,
+            ], 'Listado paginado de ventas obtenido.');
         }
 
         return $this->apiResponse($ventas, 'Listado de ventas obtenido.');

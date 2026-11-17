@@ -3,18 +3,62 @@ import { ref, onMounted } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
 import { useAuthStore } from '@/stores/authStore'
+import PaginationBar from '@/components/PaginationBar.vue'
 
 const tasaStore = useTasaStore()
 const authStore = useAuthStore()
 const ventas = ref([])
 const busqueda = ref('')
+const estadoFiltro = ref('')
+const paginaActual = ref(1)
+const porPagina = ref(25)
+const paginacion = ref({ total: 0, per_page: 25, current_page: 1, last_page: 1, from: 0, to: 0 })
+const cargando = ref(false)
 const facturaDetalle = ref(null)
 const errorMsg = ref('')
 const exitoMsg = ref('')
+let debounceTimer = null
 
 async function cargarVentas() {
-  const res = await api.get(`/ventas${busqueda.value ? `?q=${encodeURIComponent(busqueda.value)}` : ''}`)
-  ventas.value = res.data || []
+  cargando.value = true
+  try {
+    const params = new URLSearchParams({
+      page: String(paginaActual.value),
+      per_page: String(porPagina.value)
+    })
+    if (busqueda.value.trim()) params.set('q', busqueda.value.trim())
+    if (estadoFiltro.value) params.set('estado', estadoFiltro.value)
+
+    const res = await api.get(`/ventas?${params.toString()}`)
+    const data = res.data || {}
+    ventas.value = data.items || []
+    if (data.pagination) {
+      paginacion.value = data.pagination
+      paginaActual.value = data.pagination.current_page
+    }
+  } finally {
+    cargando.value = false
+  }
+}
+
+function buscarVentas() {
+  paginaActual.value = 1
+  cargarVentas()
+}
+
+function alEscribirBusqueda() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(buscarVentas, 180)
+}
+
+function cambiarPagina(pag) {
+  paginaActual.value = pag
+  cargarVentas()
+}
+
+function cambiarPorPagina(pp) {
+  porPagina.value = pp
+  buscarVentas()
 }
 
 onMounted(cargarVentas)
@@ -59,15 +103,22 @@ async function anularFactura(venta) {
           }}
         </p>
       </div>
-      <div style="display: flex; gap: 0.5rem">
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
         <input
           v-model="busqueda"
           type="text"
           class="form-control"
-          placeholder="Buscar por Nro. Factura o Cliente..."
-          @keyup.enter="cargarVentas"
+          style="min-width: 220px"
+          placeholder="🔍 Buscar por Nro. Factura o Cliente..."
+          @input="alEscribirBusqueda"
+          @keyup.enter="buscarVentas"
         />
-        <button class="btn btn-dark" @click="cargarVentas">Buscar</button>
+        <select v-model="estadoFiltro" class="form-control" style="width: 150px" @change="buscarVentas">
+          <option value="">Todos los estados</option>
+          <option value="COMPLETADA">COMPLETADA</option>
+          <option value="ANULADA">ANULADA</option>
+        </select>
+        <button class="btn btn-dark" @click="buscarVentas" :disabled="cargando">Buscar</button>
       </div>
     </div>
 
@@ -134,6 +185,14 @@ async function anularFactura(venta) {
           </tbody>
         </table>
       </div>
+
+      <PaginationBar
+        :pagination="paginacion"
+        :loading="cargando"
+        label="facturas"
+        @page-change="cambiarPagina"
+        @per-page-change="cambiarPorPagina"
+      />
     </div>
 
     <!-- Modal Detalle Completo de Factura y Pagos -->
