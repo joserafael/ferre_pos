@@ -3,6 +3,7 @@
 namespace App\Controllers\Api;
 
 use App\Libraries\RedisService;
+use App\Models\CajaSesionModel;
 use App\Models\ClienteModel;
 use App\Models\MetodoPagoModel;
 use App\Models\MovimientoInventarioModel;
@@ -184,6 +185,16 @@ class VentaController extends ApiController
         $tasaActiva = (new TasaCambioModel())->getActiva();
         if (!$tasaActiva) {
             return $this->apiError('No existe una tasa de cambio activa para facturar.', 422, 'NO_ACTIVE_RATE');
+        }
+
+        $auth        = $this->getAuthUser();
+        $cajaAbierta = (new CajaSesionModel())->getSesionAbierta((int) ($auth['uid'] ?? 0));
+        if (!$cajaAbierta) {
+            return $this->apiError(
+                'Debe abrir su caja antes de emitir facturas en el Punto de Venta.',
+                409,
+                'CASH_REGISTER_CLOSED'
+            );
         }
 
         // Adquirir cerrojos atómicos distribuidos (Mutex) en Redis para cada producto a vender
@@ -402,6 +413,7 @@ class VentaController extends ApiController
             'vuelto_ves'        => $vueltoVes,
             'estado'            => 'COMPLETADA',
             'usuario_id'        => $auth['uid'] ?? 1,
+            'caja_sesion_id'    => $cajaAbierta['id'],
             'created_at'        => $now,
         ], true);
 

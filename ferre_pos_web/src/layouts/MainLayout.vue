@@ -70,6 +70,9 @@ function cerrarSesion() {
         <router-link to="/ventas" class="nav-link" active-class="active">
           <span>🧾</span> {{ authStore.isAdmin ? 'Facturas & Multipago' : 'Mis Ventas Realizadas' }}
         </router-link>
+        <router-link to="/caja" class="nav-link" active-class="active">
+          <span>🔐</span> Apertura & Cierre de Caja
+        </router-link>
 
         <template v-if="authStore.isAdmin">
           <router-link to="/dashboard" class="nav-link" active-class="active">

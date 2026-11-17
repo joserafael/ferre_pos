@@ -29,6 +29,13 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function (R
         $routes->post('pos/liberar-stock', 'PosController::liberarStock');
         $routes->get('pos/stock-disponible/(:num)', 'PosController::stockDisponible/$1');
 
+        // Apertura, Arqueo y Cierre de Caja (Bimonetario USD/VES)
+        $routes->get('caja/actual', 'CajaController::actual');
+        $routes->post('caja/abrir', 'CajaController::abrir');
+        $routes->post('caja/cerrar', 'CajaController::cerrar');
+        $routes->get('caja/historial', 'CajaController::historial');
+        $routes->get('caja/(:num)', 'CajaController::show/$1');
+
         // Catálogos de solo lectura requeridos por el POS
         $routes->get('categorias', 'CategoriaController::index');
         $routes->get('unidades-medida', 'CatalogoController::unidades');

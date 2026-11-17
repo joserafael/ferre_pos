@@ -9,6 +9,7 @@ import CategoriasView from '@/views/CategoriasView.vue'
 import InventarioView from '@/views/InventarioView.vue'
 import VentasView from '@/views/VentasView.vue'
 import CajerosView from '@/views/CajerosView.vue'
+import CajaView from '@/views/CajaView.vue'
 
 const routes = [
   {
@@ -25,6 +26,7 @@ const routes = [
       { path: '', redirect: '/pos' },
       { path: 'pos', name: 'pos', component: PosView },
       { path: 'ventas', name: 'ventas', component: VentasView },
+      { path: 'caja', name: 'caja', component: CajaView },
       { path: 'dashboard', name: 'dashboard', component: DashboardView, meta: { adminOnly: true } },
       { path: 'productos', name: 'productos', component: ProductosView, meta: { adminOnly: true } },
       { path: 'categorias', name: 'categorias', component: CategoriasView, meta: { adminOnly: true } },

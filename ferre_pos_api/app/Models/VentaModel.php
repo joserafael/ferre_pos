@@ -32,6 +32,7 @@ class VentaModel extends Model
         'vuelto_ves',
         'estado',
         'usuario_id',
+        'caja_sesion_id',
         'created_at',
     ];
 }

@@ -3,9 +3,14 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
 import { usePosStore } from '@/stores/posStore'
+import { useCajaStore } from '@/stores/cajaStore'
 
 const tasaStore = useTasaStore()
 const posStore = usePosStore()
+const cajaStore = useCajaStore()
+
+const aperturaRapida = ref({ monto_apertura_usd: 0, monto_apertura_ves: 0 })
+const abriendoCaja = ref(false)
 
 const metodosPago = ref([])
 const busqueda = ref('')
@@ -113,13 +118,30 @@ async function guardarClienteRapido() {
 async function cargarDatosPos() {
   cargando.value = true
   try {
-    const resMet = await api.get('/metodos-pago')
+    const [resMet] = await Promise.all([
+      api.get('/metodos-pago'),
+      cajaStore.cargarCajaActual()
+    ])
     metodosPago.value = resMet.data || []
     if (metodosPago.value.length && !metodoSeleccionadoId.value) {
       metodoSeleccionadoId.value = metodosPago.value[0].id
     }
   } finally {
     cargando.value = false
+  }
+}
+
+async function abrirCajaRapida() {
+  alertaError.value = ''
+  abriendoCaja.value = true
+  try {
+    await cajaStore.abrirCaja(aperturaRapida.value)
+    alertaExito.value = 'Caja abierta exitosamente. Ya puede emitir facturas.'
+    nextTick(() => searchInputRef.value?.focus())
+  } catch (e) {
+    alertaError.value = e.message
+  } finally {
+    abriendoCaja.value = false
   }
 }
 
@@ -399,6 +421,60 @@ async function confirmarFacturaBimonetaria() {
   <div class="pos-layout">
     <!-- Columna Izquierda: Buscador Inteligente Autocomplete -->
     <div class="pos-catalog">
+      <!-- Banner Apertura Rápida si la caja está cerrada -->
+      <div
+        v-if="cajaStore.cargada && !cajaStore.estaAbierta"
+        class="card"
+        style="margin-bottom: 1rem; border-left: 4px solid var(--danger); background: #fef2f2"
+      >
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem">
+          <div>
+            <strong style="color: var(--danger)">🔴 Caja Cerrada</strong>
+            <div style="font-size: 0.8rem; color: var(--text-muted)">
+              Debe abrir su caja con el fondo inicial antes de emitir facturas.
+            </div>
+          </div>
+          <form style="display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center" @submit.prevent="abrirCajaRapida">
+            <input
+              v-model="aperturaRapida.monto_apertura_usd"
+              type="number"
+              step="0.01"
+              min="0"
+              class="form-control mono"
+              style="width: 115px"
+              placeholder="Fondo $"
+              title="Fondo inicial USD"
+            />
+            <input
+              v-model="aperturaRapida.monto_apertura_ves"
+              type="number"
+              step="0.01"
+              min="0"
+              class="form-control mono"
+              style="width: 125px"
+              placeholder="Fondo Bs."
+              title="Fondo inicial Bolívares"
+            />
+            <button type="submit" class="btn btn-primary btn-sm" :disabled="abriendoCaja">
+              {{ abriendoCaja ? 'Abriendo...' : '🔓 Abrir Caja' }}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Barra discreta de Caja Abierta -->
+      <div
+        v-else-if="cajaStore.estaAbierta"
+        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; padding: 0 0.2rem; font-size: 0.78rem"
+      >
+        <span class="badge badge-usd">
+          🟢 Caja #{{ cajaStore.sesion.id }} Abierta · {{ cajaStore.resumen?.ventas_cantidad || 0 }} ventas en turno
+        </span>
+        <router-link to="/caja" style="color: var(--ves-blue); font-weight: 700; text-decoration: none">
+          Arqueo y Cierre de Caja →
+        </router-link>
+      </div>
+
       <div class="card search-card" style="margin-bottom: 1rem">
         <div class="search-input-wrap">
           <input
