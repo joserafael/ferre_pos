@@ -11,40 +11,75 @@ use CodeIgniter\HTTP\ResponseInterface;
 
 class ProductoController extends ApiController
 {
+    private function adjuntarStockDisponible(array &$productos): void
+    {
+        foreach ($productos as &$p) {
+            $reservado             = RedisService::getReservedStock($p['id']);
+            $p['stock_reservado']  = $reservado;
+            $p['stock_disponible'] = max(0.000, round((float) $p['stock_actual'] - $reservado, 3));
+        }
+    }
+
     public function index(): ResponseInterface
     {
         $search      = $this->request->getGet('q');
         $categoriaId = $this->request->getGet('categoria_id') ? (int) $this->request->getGet('categoria_id') : null;
         $soloActivos = $this->request->getGet('activos') !== null ? (bool) $this->request->getGet('activos') : false;
+        $pageParam   = $this->request->getGet('page');
+        $perPageParam = $this->request->getGet('per_page');
 
+        $model = new ProductoModel();
+
+        // Modo paginado (cuando el cliente solicita ?page= o ?per_page=)
+        if ($pageParam !== null || $perPageParam !== null) {
+            $page    = max(1, (int) ($pageParam ?? 1));
+            $perPage = max(5, min(100, (int) ($perPageParam ?? 25)));
+
+            $cacheKey = null;
+            if (empty($search)) {
+                $cacheKey = sprintf(
+                    'productos:page_%d:pp_%d:cat_%s:act_%s',
+                    $page,
+                    $perPage,
+                    $categoriaId ?? 'all',
+                    $soloActivos ? '1' : '0'
+                );
+                $cached = RedisService::getCached($cacheKey);
+                if ($cached !== null && isset($cached['items'])) {
+                    $this->adjuntarStockDisponible($cached['items']);
+                    return $this->apiResponse($cached, 'Catálogo de productos paginado obtenido (caché).');
+                }
+            }
+
+            $resultado = $model->getPaginados($search, $categoriaId, $soloActivos, $page, $perPage);
+
+            if ($cacheKey !== null) {
+                RedisService::setCached($cacheKey, $resultado, 600);
+            }
+
+            $this->adjuntarStockDisponible($resultado['items']);
+
+            return $this->apiResponse($resultado, 'Catálogo de productos paginado obtenido.');
+        }
+
+        // Modo completo (retrocompatible para POS / Inventario)
         $cacheKey = null;
         if (empty($search)) {
             $cacheKey = 'productos:cat_' . ($categoriaId ?? 'all') . '_act_' . ($soloActivos ? '1' : '0');
             $cached   = RedisService::getCached($cacheKey);
             if ($cached !== null) {
-                // Ajustamos en tiempo real el stock disponible con las reservas activas en Redis
-                foreach ($cached as &$p) {
-                    $reservado               = RedisService::getReservedStock($p['id']);
-                    $p['stock_reservado']    = $reservado;
-                    $p['stock_disponible']   = max(0.000, round((float) $p['stock_actual'] - $reservado, 3));
-                }
+                $this->adjuntarStockDisponible($cached);
                 return $this->apiResponse($cached, 'Catálogo de productos obtenido (caché).');
             }
         }
 
-        $model     = new ProductoModel();
         $productos = $model->getConRelaciones($search, $categoriaId, $soloActivos);
 
         if ($cacheKey !== null) {
             RedisService::setCached($cacheKey, $productos, 600);
         }
 
-        // Agregar stock_reservado y stock_disponible dinámicos
-        foreach ($productos as &$p) {
-            $reservado             = RedisService::getReservedStock($p['id']);
-            $p['stock_reservado']  = $reservado;
-            $p['stock_disponible'] = max(0.000, round((float) $p['stock_actual'] - $reservado, 3));
-        }
+        $this->adjuntarStockDisponible($productos);
 
         return $this->apiResponse($productos, 'Catálogo de productos obtenido.');
     }

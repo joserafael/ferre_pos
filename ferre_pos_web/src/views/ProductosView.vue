@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
 import { useTasaStore } from '@/stores/tasaStore'
 
@@ -8,6 +8,17 @@ const productos = ref([])
 const categorias = ref([])
 const unidades = ref([])
 const busqueda = ref('')
+const categoriaFiltro = ref('')
+const paginaActual = ref(1)
+const porPagina = ref(25)
+const paginacion = ref({
+  total: 0,
+  per_page: 25,
+  current_page: 1,
+  last_page: 1,
+  from: 0,
+  to: 0
+})
 const loading = ref(false)
 const modalAbierto = ref(false)
 const editandoId = ref(null)
@@ -30,23 +41,79 @@ const form = ref({
   stock_minimo: 5.0
 })
 
-async function cargarCatalogos() {
-  loading.value = true
+const paginasVisibles = computed(() => {
+  const total = paginacion.value.last_page
+  const actual = paginacion.value.current_page
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  const paginas = [1]
+  if (actual > 3) paginas.push('...')
+  const inicio = Math.max(2, actual - 1)
+  const fin = Math.min(total - 1, actual + 1)
+  for (let i = inicio; i <= fin; i++) {
+    paginas.push(i)
+  }
+  if (actual < total - 2) paginas.push('...')
+  paginas.push(total)
+  return paginas
+})
+
+async function cargarCatalogosBase() {
   try {
-    const [resProd, resCat, resUni] = await Promise.all([
-      api.get(`/productos${busqueda.value ? `?q=${encodeURIComponent(busqueda.value)}` : ''}`),
+    const [resCat, resUni] = await Promise.all([
       api.get('/categorias'),
       api.get('/unidades-medida')
     ])
-    productos.value = resProd.data || []
     categorias.value = resCat.data || []
     unidades.value = resUni.data || []
+  } catch (e) {
+    console.error('Error cargando catálogos base:', e)
+  }
+}
+
+async function cargarProductos() {
+  loading.value = true
+  try {
+    const params = new URLSearchParams({
+      page: String(paginaActual.value),
+      per_page: String(porPagina.value)
+    })
+    if (busqueda.value.trim()) {
+      params.set('q', busqueda.value.trim())
+    }
+    if (categoriaFiltro.value) {
+      params.set('categoria_id', String(categoriaFiltro.value))
+    }
+
+    const resProd = await api.get(`/productos?${params.toString()}`)
+    const data = resProd.data || {}
+    productos.value = data.items || []
+    if (data.pagination) {
+      paginacion.value = data.pagination
+      paginaActual.value = data.pagination.current_page
+    }
   } finally {
     loading.value = false
   }
 }
 
-onMounted(cargarCatalogos)
+function buscarProductos() {
+  paginaActual.value = 1
+  cargarProductos()
+}
+
+function cambiarPagina(nuevaPagina) {
+  if (nuevaPagina < 1 || nuevaPagina > paginacion.value.last_page || nuevaPagina === paginaActual.value) {
+    return
+  }
+  paginaActual.value = nuevaPagina
+  cargarProductos()
+}
+
+onMounted(async () => {
+  await Promise.all([cargarCatalogosBase(), cargarProductos()])
+})
 
 function abrirNuevo() {
   editandoId.value = null
@@ -100,7 +167,7 @@ async function guardarProducto() {
       await api.post('/productos', form.value)
     }
     modalAbierto.value = false
-    await cargarCatalogos()
+    await cargarProductos()
   } catch (e) {
     errorForm.value = e.message
   } finally {
@@ -122,15 +189,39 @@ async function guardarProducto() {
     </div>
 
     <div class="card" style="margin-bottom: 1rem">
-      <div style="display: flex; gap: 0.75rem">
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center">
         <input
           v-model="busqueda"
           type="text"
           class="form-control"
+          style="flex: 2; min-width: 220px"
           placeholder="Filtrar por SKU, código de barras o nombre..."
-          @keyup.enter="cargarCatalogos"
+          @keyup.enter="buscarProductos"
         />
-        <button class="btn btn-dark" @click="cargarCatalogos">Buscar</button>
+        <select
+          v-model="categoriaFiltro"
+          class="form-control"
+          style="flex: 1; min-width: 180px"
+          @change="buscarProductos"
+        >
+          <option value="">Todas las categorías</option>
+          <option v-for="c in categorias" :key="c.id" :value="c.id">
+            {{ c.nombre }} ({{ c.total_productos }})
+          </option>
+        </select>
+        <select
+          v-model.number="porPagina"
+          class="form-control"
+          style="width: 130px"
+          @change="buscarProductos"
+        >
+          <option :value="25">25 / pág.</option>
+          <option :value="50">50 / pág.</option>
+          <option :value="100">100 / pág.</option>
+        </select>
+        <button class="btn btn-dark" @click="buscarProductos" :disabled="loading">
+          {{ loading ? 'Cargando...' : 'Buscar' }}
+        </button>
       </div>
     </div>
 
@@ -150,6 +241,16 @@ async function guardarProducto() {
             </tr>
           </thead>
           <tbody>
+            <tr v-if="loading && productos.length === 0">
+              <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted)">
+                Cargando productos...
+              </td>
+            </tr>
+            <tr v-else-if="productos.length === 0">
+              <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-muted)">
+                No se encontraron productos con los filtros aplicados.
+              </td>
+            </tr>
             <tr v-for="p in productos" :key="p.id">
               <td class="mono">
                 <strong>{{ p.sku }}</strong>
@@ -185,6 +286,77 @@ async function guardarProducto() {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Barra de Paginación -->
+      <div
+        v-if="paginacion.total > 0"
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          margin-top: 1rem;
+          padding-top: 0.9rem;
+          border-top: 1px solid var(--border-color, #e5e7eb);
+        "
+      >
+        <div style="font-size: 0.85rem; color: var(--text-muted)">
+          Mostrando <strong>{{ paginacion.from }}</strong>–<strong>{{ paginacion.to }}</strong> de
+          <strong>{{ paginacion.total }}</strong> productos
+        </div>
+
+        <div style="display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center">
+          <button
+            class="btn btn-outline btn-sm"
+            :disabled="paginacion.current_page <= 1 || loading"
+            @click="cambiarPagina(1)"
+            title="Primera página"
+          >
+            «
+          </button>
+          <button
+            class="btn btn-outline btn-sm"
+            :disabled="paginacion.current_page <= 1 || loading"
+            @click="cambiarPagina(paginacion.current_page - 1)"
+          >
+            ‹ Anterior
+          </button>
+
+          <template v-for="(pag, idx) in paginasVisibles" :key="idx">
+            <span
+              v-if="pag === '...'"
+              style="padding: 0 0.35rem; color: var(--text-muted); font-size: 0.85rem"
+            >
+              ...
+            </span>
+            <button
+              v-else
+              :class="['btn btn-sm', pag === paginacion.current_page ? 'btn-primary' : 'btn-outline']"
+              :disabled="loading"
+              @click="cambiarPagina(pag)"
+            >
+              {{ pag }}
+            </button>
+          </template>
+
+          <button
+            class="btn btn-outline btn-sm"
+            :disabled="paginacion.current_page >= paginacion.last_page || loading"
+            @click="cambiarPagina(paginacion.current_page + 1)"
+          >
+            Siguiente ›
+          </button>
+          <button
+            class="btn btn-outline btn-sm"
+            :disabled="paginacion.current_page >= paginacion.last_page || loading"
+            @click="cambiarPagina(paginacion.last_page)"
+            title="Última página"
+          >
+            »
+          </button>
+        </div>
       </div>
     </div>
 
