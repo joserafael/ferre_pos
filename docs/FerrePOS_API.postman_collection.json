@@ -187,6 +187,43 @@
 						"description": "Consulta pública y en tiempo real de la tasa de cambio oficial activa (USD -> VES)."
 					},
 					"response": []
+				},
+				{
+					"name": "Cerrar Sesión (Logout & Blacklist Token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.collectionVariables.set('jwt_token', '');",
+									"console.log('JWT Token invalidado en Redis y limpiado de variables de colección.');"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Revoca el token JWT actual agregándolo a la lista negra en Redis con el tiempo restante de su validez."
+					},
+					"response": []
 				}
 			]
 		},
@@ -782,6 +819,85 @@
 						"description": "Anula una factura emitida (solo ADMIN), revirtiendo atómicamente las existencias al inventario con movimiento ANULACION_VENTA."
 					},
 					"response": []
+				},
+				{
+					"name": "Consultar Stock en Tiempo Real (Físico, Reservado y Disponible)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/pos/stock-disponible/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pos",
+								"stock-disponible",
+								"1"
+							]
+						},
+						"description": "Retorna en tiempo real el stock físico en base de datos, el total apartado por otras cajas en Redis y el stock neto disponible para venta."
+					},
+					"response": []
+				},
+				{
+					"name": "Reservar Stock Temporalmente (Multi-caja)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"carrito_id\": \"cart_caja_1_uuid\",\n    \"ttl\": 600,\n    \"items\": [\n        {\n            \"producto_id\": 1,\n            \"cantidad\": 5.000\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/pos/reservar-stock",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pos",
+								"reservar-stock"
+							]
+						},
+						"description": "Aparta temporalmente inventario en Redis durante X segundos para evitar sobreventa entre cajeros concurrentes."
+					},
+					"response": []
+				},
+				{
+					"name": "Liberar Reserva de Stock",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"carrito_id\": \"cart_caja_1_uuid\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/pos/liberar-stock",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"pos",
+								"liberar-stock"
+							]
+						},
+						"description": "Libera la reserva temporal en Redis si el cliente cancela la compra o el cajero limpia el carrito."
+					},
+					"response": []
 				}
 			]
 		},
@@ -1018,6 +1134,32 @@
 							]
 						},
 						"description": "Reporte de facturas y volumen total liquidado por un cajero particular."
+					},
+					"response": []
+				},
+				{
+					"name": "Revocar Todas las Sesiones de un Cajero",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/cajeros/2/revocar-sesiones",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"cajeros",
+								"2",
+								"revocar-sesiones"
+							]
+						},
+						"description": "Endpoint exclusivo de Administrador. Invalida de forma inmediata en Redis todos los tokens y sesiones activas del cajero especificado."
 					},
 					"response": []
 				}
