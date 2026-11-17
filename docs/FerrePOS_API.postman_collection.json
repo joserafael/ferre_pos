@@ -1164,6 +1164,149 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "10. Apertura, Arqueo y Cierre de Caja",
+			"item": [
+				{
+					"name": "Consultar Estado Actual de Caja",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/caja/actual",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"caja",
+								"actual"
+							]
+						},
+						"description": "Retorna si el usuario tiene una caja abierta, sus fondos iniciales y el resumen de ventas y efectivo esperado en tiempo real."
+					},
+					"response": []
+				},
+				{
+					"name": "Abrir Turno de Caja (Fondo Inicial USD/Bs.)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"monto_apertura_usd\": 50.00,\n    \"monto_apertura_ves\": 1500.00,\n    \"observacion_apertura\": \"Turno mañana - Caja 1\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/caja/abrir",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"caja",
+								"abrir"
+							]
+						},
+						"description": "Abre una sesión de caja para el cajero/administrador autenticado. Requisito obligatorio para poder emitir facturas en el POS."
+					},
+					"response": []
+				},
+				{
+					"name": "Cerrar Caja y Registrar Arqueo Bimonetario",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"contado_efectivo_usd\": 50.00,\n    \"contado_efectivo_ves\": 1500.00,\n    \"observacion_cierre\": \"Cierre conforme sin novedades\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/caja/cerrar",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"caja",
+								"cerrar"
+							]
+						},
+						"description": "Cierra la sesión abierta calculando automáticamente el efectivo esperado vs contado, diferencias de arqueo y desglose por método de pago."
+					},
+					"response": []
+				},
+				{
+					"name": "Historial Paginado de Cierres de Caja",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/caja/historial?page=1&per_page=15",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"caja",
+								"historial"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "per_page",
+									"value": "15"
+								},
+								{
+									"key": "estado",
+									"value": "CERRADA",
+									"disabled": true
+								},
+								{
+									"key": "q",
+									"value": "",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Lista paginada de sesiones de caja. El cajero ve solo las propias; el administrador puede auditar todas."
+					},
+					"response": []
+				},
+				{
+					"name": "Detalle / Comprobante de Arqueo por ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/caja/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"caja",
+								"1"
+							]
+						},
+						"description": "Retorna el comprobante detallado de apertura, cierre, diferencias y desglose por método de pago de una sesión específica."
+					},
+					"response": []
+				}
+			]
 		}
 	]
 }
