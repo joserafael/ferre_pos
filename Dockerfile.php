@@ -1,5 +1,5 @@
 # Using an official PHP image as base image
-FROM php:8.5-fpm-alpine
+FROM php:8.6.0-fpm-alpine
 
 # Set working directory
 WORKDIR /var/www/html
@@ -23,7 +23,7 @@ RUN apk update && apk add --no-cache \
 
 # Install PHP extensions
 # Configure GD with FreeType and JPEG support
-# Note: In PHP 8.5, opcache and mbstring are already built-in
+# Note: In PHP 8.5+, opcache and mbstring are already built-in
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
     pdo_mysql \
